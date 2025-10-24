@@ -1,0 +1,457 @@
+openapi: 3.0.3
+info:
+  title: TrustyAI Metrics API
+  description: |
+    API contract for querying TrustyAI behavior metrics (data drift, fairness, bias detection).
+    This is an OPTIONAL service - the metrics page gracefully degrades if unavailable.
+  version: 1.0.0
+  contact:
+    name: OpenShift AI Console Team
+
+servers:
+  - url: /api/trustyai/v1
+    description: TrustyAI service proxy with RBAC filtering
+
+security:
+  - bearerAuth: []
+
+paths:
+  /health:
+    get:
+      summary: Check TrustyAI service availability
+      description: |
+        Check if TrustyAI service is available for the specified namespace.
+        Used to determine whether to show behavior metrics sections.
+      operationId: checkTrustyAIHealth
+      tags:
+        - Health
+      parameters:
+        - name: namespace
+          in: query
+          required: true
+          description: Kubernetes namespace to check
+          schema:
+            type: string
+            example: "my-project"
+
+      responses:
+        '200':
+          description: TrustyAI is available
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              example:
+                status: available
+                version: "0.3.0"
+                supportedMetrics:
+                  - drift
+                  - fairness
+                  - bias
+
+        '404':
+          description: TrustyAI not configured for namespace
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: unavailable
+                error: "TrustyAI not configured for namespace 'my-project'"
+
+        '503':
+          description: TrustyAI service unhealthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /metrics/{namespace}/{model_id}:
+    get:
+      summary: Get behavior metrics for a model
+      description: |
+        Retrieve behavior metrics (drift, fairness, prediction patterns) for a specific model
+        over a time range. Returns null for unavailable metrics.
+      operationId: getModelBehaviorMetrics
+      tags:
+        - Behavior Metrics
+      parameters:
+        - name: namespace
+          in: path
+          required: true
+          description: Kubernetes namespace
+          schema:
+            type: string
+            example: "my-project"
+
+        - name: model_id
+          in: path
+          required: true
+          description: Model identifier
+          schema:
+            type: string
+            example: "fraud-detection-v2"
+
+        - name: start
+          in: query
+          required: true
+          description: Start timestamp (ISO 8601)
+          schema:
+            type: string
+            format: date-time
+            example: "2025-10-24T09:00:00Z"
+
+        - name: end
+          in: query
+          required: true
+          description: End timestamp (ISO 8601)
+          schema:
+            type: string
+            format: date-time
+            example: "2025-10-24T10:00:00Z"
+
+        - name: metrics
+          in: query
+          required: false
+          description: Comma-separated list of metric types to return
+          schema:
+            type: string
+            example: "drift,fairness,predictions"
+
+      responses:
+        '200':
+          description: Behavior metrics retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BehaviorMetricsResponse'
+              examples:
+                full:
+                  value:
+                    namespace: my-project
+                    modelId: fraud-detection-v2
+                    timeRange:
+                      start: "2025-10-24T09:00:00Z"
+                      end: "2025-10-24T10:00:00Z"
+                    metrics:
+                      drift:
+                        score: 0.23
+                        threshold: 0.5
+                        status: ok
+                      fairness:
+                        disparateImpact: 0.85
+                        threshold: 0.8
+                        status: warning
+                      predictions:
+                        distribution:
+                          fraud: 127
+                          legitimate: 8453
+                        confidenceAvg: 0.87
+                        confidenceP50: 0.91
+
+                partial:
+                  summary: When some metrics unavailable
+                  value:
+                    namespace: my-project
+                    modelId: fraud-detection-v2
+                    timeRange:
+                      start: "2025-10-24T09:00:00Z"
+                      end: "2025-10-24T10:00:00Z"
+                    metrics:
+                      drift: null
+                      fairness: null
+                      predictions:
+                        distribution:
+                          fraud: 127
+                          legitimate: 8453
+
+        '403':
+          description: Access denied to namespace
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+        '404':
+          description: Model not found or not monitored
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Model 'fraud-detection-v2' not found in namespace 'my-project'"
+
+        '422':
+          description: Invalid time range
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+        '503':
+          description: TrustyAI service unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /metrics/{namespace}/{model_id}/drift:
+    get:
+      summary: Get data drift metrics time-series
+      description: |
+        Retrieve data drift scores over time for visualization.
+        Returns time-series data showing drift detection results.
+      operationId: getDriftMetrics
+      tags:
+        - Behavior Metrics
+      parameters:
+        - name: namespace
+          in: path
+          required: true
+          schema:
+            type: string
+
+        - name: model_id
+          in: path
+          required: true
+          schema:
+            type: string
+
+        - name: start
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date-time
+
+        - name: end
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date-time
+
+        - name: step
+          in: query
+          required: false
+          description: Time resolution (e.g., "5m", "1h")
+          schema:
+            type: string
+            default: "5m"
+
+      responses:
+        '200':
+          description: Drift metrics time-series
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DriftTimeSeriesResponse'
+              example:
+                namespace: my-project
+                modelId: fraud-detection-v2
+                dataPoints:
+                  - timestamp: "2025-10-24T09:00:00Z"
+                    driftScore: 0.15
+                    status: ok
+                  - timestamp: "2025-10-24T09:05:00Z"
+                    driftScore: 0.23
+                    status: ok
+                  - timestamp: "2025-10-24T09:10:00Z"
+                    driftScore: 0.58
+                    status: warning
+
+        '404':
+          description: Model not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: OpenShift OAuth token
+
+  schemas:
+    HealthResponse:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          enum: [available, unavailable]
+        version:
+          type: string
+          description: TrustyAI service version
+        supportedMetrics:
+          type: array
+          items:
+            type: string
+            enum: [drift, fairness, bias, predictions]
+
+    BehaviorMetricsResponse:
+      type: object
+      required:
+        - namespace
+        - modelId
+        - timeRange
+        - metrics
+      properties:
+        namespace:
+          type: string
+        modelId:
+          type: string
+        timeRange:
+          type: object
+          properties:
+            start:
+              type: string
+              format: date-time
+            end:
+              type: string
+              format: date-time
+        metrics:
+          type: object
+          properties:
+            drift:
+              oneOf:
+                - type: "null"
+                - $ref: '#/components/schemas/DriftMetrics'
+            fairness:
+              oneOf:
+                - type: "null"
+                - $ref: '#/components/schemas/FairnessMetrics'
+            predictions:
+              oneOf:
+                - type: "null"
+                - $ref: '#/components/schemas/PredictionMetrics'
+
+    DriftMetrics:
+      type: object
+      required:
+        - score
+        - status
+      properties:
+        score:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          description: Drift score (0 = no drift, 1 = high drift)
+        threshold:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          description: Configured drift threshold
+        status:
+          type: string
+          enum: [ok, warning, critical]
+        details:
+          type: object
+          description: Feature-level drift details
+          additionalProperties:
+            type: number
+
+    FairnessMetrics:
+      type: object
+      required:
+        - disparateImpact
+        - status
+      properties:
+        disparateImpact:
+          type: number
+          format: float
+          description: Disparate impact ratio (ideal = 1.0)
+        threshold:
+          type: number
+          format: float
+          description: Fairness threshold (typically 0.8)
+        status:
+          type: string
+          enum: [ok, warning, critical]
+        biasScore:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          description: Overall bias detection score
+
+    PredictionMetrics:
+      type: object
+      properties:
+        distribution:
+          type: object
+          description: Prediction class distribution
+          additionalProperties:
+            type: integer
+            minimum: 0
+          example:
+            fraud: 127
+            legitimate: 8453
+        confidenceAvg:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+        confidenceP50:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+
+    DriftTimeSeriesResponse:
+      type: object
+      required:
+        - namespace
+        - modelId
+        - dataPoints
+      properties:
+        namespace:
+          type: string
+        modelId:
+          type: string
+        dataPoints:
+          type: array
+          items:
+            type: object
+            required:
+              - timestamp
+              - driftScore
+              - status
+            properties:
+              timestamp:
+                type: string
+                format: date-time
+              driftScore:
+                type: number
+                format: float
+                minimum: 0
+                maximum: 1
+              status:
+                type: string
+                enum: [ok, warning, critical]
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          description: Human-readable error message
+        status:
+          type: string
+          enum: [unavailable, error]
+        details:
+          type: string
+
+tags:
+  - name: Health
+    description: TrustyAI service availability checks
+  - name: Behavior Metrics
+    description: Model behavior, drift, and fairness metrics

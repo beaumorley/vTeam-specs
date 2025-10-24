@@ -1,0 +1,400 @@
+openapi: 3.0.3
+info:
+  title: Prometheus Query API for Model Metrics
+  description: |
+    API contract for querying Prometheus metrics for deployed models.
+    All queries are automatically filtered by namespace based on user RBAC permissions.
+  version: 1.0.0
+  contact:
+    name: OpenShift AI Console Team
+
+servers:
+  - url: /api/prometheus/v1
+    description: Prometheus API proxy with RBAC filtering
+
+security:
+  - bearerAuth: []
+
+paths:
+  /query:
+    get:
+      summary: Execute instant Prometheus query
+      description: |
+        Execute a PromQL query at a single point in time (current or specified timestamp).
+        Backend automatically injects namespace filter based on user permissions.
+      operationId: queryInstant
+      tags:
+        - Metrics
+      parameters:
+        - name: query
+          in: query
+          required: true
+          description: PromQL query expression
+          schema:
+            type: string
+            example: "sum(rate(model_requests_total[5m])) by (model_id)"
+
+        - name: time
+          in: query
+          required: false
+          description: Evaluation timestamp (RFC3339 or Unix timestamp)
+          schema:
+            type: string
+            example: "2025-10-24T10:30:00Z"
+
+        - name: timeout
+          in: query
+          required: false
+          description: Query timeout in seconds
+          schema:
+            type: string
+            default: "30s"
+            example: "30s"
+
+      responses:
+        '200':
+          description: Query executed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryInstantResponse'
+              examples:
+                success:
+                  value:
+                    status: success
+                    data:
+                      resultType: vector
+                      result:
+                        - metric:
+                            model_id: fraud-detection-v2
+                            namespace: my-project
+                          value: [1729760400, "152.3"]
+
+        '400':
+          description: Invalid query syntax
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: error
+                errorType: bad_data
+                error: "invalid query syntax"
+
+        '403':
+          description: Access denied to requested namespace
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: error
+                errorType: forbidden
+                error: "user does not have access to namespace 'production'"
+
+        '408':
+          description: Query timeout
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: error
+                errorType: timeout
+                error: "query timed out after 30s"
+
+        '422':
+          description: Query cannot be executed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+        '503':
+          description: Prometheus service unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /query_range:
+    get:
+      summary: Execute range Prometheus query
+      description: |
+        Execute a PromQL query over a time range with specified resolution.
+        Returns time-series data points for visualization.
+        Backend automatically injects namespace filter based on user permissions.
+      operationId: queryRange
+      tags:
+        - Metrics
+      parameters:
+        - name: query
+          in: query
+          required: true
+          description: PromQL query expression
+          schema:
+            type: string
+            example: "sum(rate(model_requests_total[5m])) by (model_id)"
+
+        - name: start
+          in: query
+          required: true
+          description: Start timestamp (RFC3339 or Unix timestamp)
+          schema:
+            type: string
+            example: "2025-10-24T09:00:00Z"
+
+        - name: end
+          in: query
+          required: true
+          description: End timestamp (RFC3339 or Unix timestamp)
+          schema:
+            type: string
+            example: "2025-10-24T10:00:00Z"
+
+        - name: step
+          in: query
+          required: true
+          description: Query resolution step (e.g., "15s", "1m", "5m")
+          schema:
+            type: string
+            example: "1m"
+
+        - name: timeout
+          in: query
+          required: false
+          description: Query timeout in seconds
+          schema:
+            type: string
+            default: "30s"
+
+      responses:
+        '200':
+          description: Range query executed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryRangeResponse'
+              examples:
+                success:
+                  value:
+                    status: success
+                    data:
+                      resultType: matrix
+                      result:
+                        - metric:
+                            model_id: fraud-detection-v2
+                            namespace: my-project
+                          values:
+                            - [1729760400, "152.3"]
+                            - [1729760460, "148.7"]
+                            - [1729760520, "155.1"]
+
+        '400':
+          description: Invalid query or time range
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+        '403':
+          description: Access denied to requested namespace
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+        '408':
+          description: Query timeout
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+        '503':
+          description: Prometheus service unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /health:
+    get:
+      summary: Check Prometheus service health
+      description: Health check endpoint to verify Prometheus availability
+      operationId: checkHealth
+      tags:
+        - Health
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [healthy]
+                  prometheus:
+                    type: object
+                    properties:
+                      reachable:
+                        type: boolean
+                      version:
+                        type: string
+                example:
+                  status: healthy
+                  prometheus:
+                    reachable: true
+                    version: "2.45.0"
+
+        '503':
+          description: Service is unhealthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [unhealthy]
+                  error:
+                    type: string
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: OpenShift OAuth token
+
+  schemas:
+    QueryInstantResponse:
+      type: object
+      required:
+        - status
+        - data
+      properties:
+        status:
+          type: string
+          enum: [success, error]
+        data:
+          type: object
+          properties:
+            resultType:
+              type: string
+              enum: [matrix, vector, scalar, string]
+            result:
+              type: array
+              items:
+                $ref: '#/components/schemas/InstantMetric'
+
+    QueryRangeResponse:
+      type: object
+      required:
+        - status
+        - data
+      properties:
+        status:
+          type: string
+          enum: [success, error]
+        data:
+          type: object
+          properties:
+            resultType:
+              type: string
+              enum: [matrix, vector, scalar, string]
+            result:
+              type: array
+              items:
+                $ref: '#/components/schemas/RangeMetric'
+
+    InstantMetric:
+      type: object
+      required:
+        - metric
+        - value
+      properties:
+        metric:
+          type: object
+          description: Label set identifying the time series
+          additionalProperties:
+            type: string
+          example:
+            model_id: fraud-detection-v2
+            namespace: my-project
+        value:
+          type: array
+          description: [timestamp, value] tuple
+          minItems: 2
+          maxItems: 2
+          items:
+            oneOf:
+              - type: number
+              - type: string
+          example: [1729760400, "152.3"]
+
+    RangeMetric:
+      type: object
+      required:
+        - metric
+        - values
+      properties:
+        metric:
+          type: object
+          description: Label set identifying the time series
+          additionalProperties:
+            type: string
+          example:
+            model_id: fraud-detection-v2
+            namespace: my-project
+        values:
+          type: array
+          description: Array of [timestamp, value] tuples
+          items:
+            type: array
+            minItems: 2
+            maxItems: 2
+            items:
+              oneOf:
+                - type: number
+                - type: string
+          example:
+            - [1729760400, "152.3"]
+            - [1729760460, "148.7"]
+
+    ErrorResponse:
+      type: object
+      required:
+        - status
+        - errorType
+        - error
+      properties:
+        status:
+          type: string
+          enum: [error]
+        errorType:
+          type: string
+          enum:
+            - timeout
+            - canceled
+            - execution
+            - bad_data
+            - internal
+            - unavailable
+            - forbidden
+        error:
+          type: string
+          description: Human-readable error message
+        warnings:
+          type: array
+          items:
+            type: string
+
+tags:
+  - name: Metrics
+    description: Prometheus metrics query operations
+  - name: Health
+    description: Service health checks
