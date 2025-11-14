@@ -1,0 +1,471 @@
+{
+  "examples": [
+    {
+      "name": "List Dashboards - Success",
+      "endpoint": "GET /api/v1/projects/{project}/dashboards",
+      "status": 200,
+      "response": {
+        "dashboards": [
+          {
+            "id": "dashboard-model-serving-42a7c3",
+            "name": "Sentiment Analysis Model - Production Metrics",
+            "project": "openshift-ai",
+            "created_at": "2025-11-14T22:00:00Z",
+            "created_by": "stella@redhat.com",
+            "updated_at": "2025-11-14T23:00:00Z",
+            "updated_by": "stella@redhat.com",
+            "version": 1,
+            "state": "active",
+            "template_id": "template-model-serving",
+            "refresh_interval": 15,
+            "time_range_default": "last_1h"
+          },
+          {
+            "id": "dashboard-training-job-8f3b91",
+            "name": "NLP Model Training - Experiment 42",
+            "project": "openshift-ai",
+            "created_at": "2025-11-14T20:00:00Z",
+            "created_by": "data-scientist@example.com",
+            "updated_at": "2025-11-14T22:30:00Z",
+            "updated_by": "data-scientist@example.com",
+            "version": 2,
+            "state": "active",
+            "template_id": "template-training-job",
+            "refresh_interval": 30,
+            "time_range_default": "last_6h"
+          }
+        ],
+        "pagination": {
+          "total": 2,
+          "limit": 20,
+          "offset": 0,
+          "next_offset": null
+        }
+      }
+    },
+    {
+      "name": "Create Dashboard - Success",
+      "endpoint": "POST /api/v1/projects/{project}/dashboards",
+      "status": 201,
+      "headers": {
+        "Location": "/api/v1/projects/openshift-ai/dashboards/dashboard-new-abc123"
+      },
+      "request": {
+        "name": "Custom Model Dashboard",
+        "doc": {
+          "kind": "Dashboard",
+          "spec": {
+            "display": {
+              "name": "Custom Model Dashboard"
+            },
+            "datasources": {
+              "prometheus": {
+                "kind": "PrometheusDatasource",
+                "spec": {
+                  "directUrl": "https://thanos-querier.openshift-monitoring.svc:9091"
+                }
+              }
+            },
+            "panels": {},
+            "layouts": []
+          }
+        },
+        "refresh_interval": 15,
+        "time_range_default": "last_1h"
+      },
+      "response": {
+        "id": "dashboard-new-abc123",
+        "name": "Custom Model Dashboard",
+        "project": "openshift-ai",
+        "doc": {
+          "kind": "Dashboard",
+          "metadata": {
+            "name": "custom-model-dashboard",
+            "project": "openshift-ai",
+            "createdAt": "2025-11-14T23:15:00Z",
+            "version": 1
+          },
+          "spec": {
+            "display": {
+              "name": "Custom Model Dashboard"
+            },
+            "datasources": {
+              "prometheus": {
+                "kind": "PrometheusDatasource",
+                "spec": {
+                  "directUrl": "https://thanos-querier.openshift-monitoring.svc:9091"
+                }
+              }
+            },
+            "panels": {},
+            "layouts": []
+          }
+        },
+        "created_at": "2025-11-14T23:15:00Z",
+        "created_by": "user@example.com",
+        "updated_at": "2025-11-14T23:15:00Z",
+        "updated_by": "user@example.com",
+        "version": 1,
+        "state": "active",
+        "template_id": null,
+        "refresh_interval": 15,
+        "time_range_default": "last_1h"
+      }
+    },
+    {
+      "name": "Create Dashboard - Name Conflict",
+      "endpoint": "POST /api/v1/projects/{project}/dashboards",
+      "status": 409,
+      "request": {
+        "name": "Sentiment Analysis Model - Production Metrics",
+        "doc": {
+          "kind": "Dashboard",
+          "spec": {
+            "display": {
+              "name": "Duplicate Name"
+            }
+          }
+        }
+      },
+      "response": {
+        "error": {
+          "code": "DASHBOARD_NAME_CONFLICT",
+          "message": "Dashboard with name 'Sentiment Analysis Model - Production Metrics' already exists in project 'openshift-ai'",
+          "details": {
+            "existing_dashboard_id": "dashboard-model-serving-42a7c3"
+          }
+        }
+      }
+    },
+    {
+      "name": "Update Dashboard - Version Conflict",
+      "endpoint": "PUT /api/v1/projects/{project}/dashboards/{id}",
+      "status": 409,
+      "request": {
+        "name": "Updated Name",
+        "version": 1
+      },
+      "response": {
+        "error": {
+          "code": "VERSION_CONFLICT",
+          "message": "Dashboard was modified by another user. Current version is 3, provided version is 1",
+          "details": {
+            "current_version": 3,
+            "provided_version": 1,
+            "last_updated_by": "another-user@example.com",
+            "last_updated_at": "2025-11-14T23:20:00Z"
+          }
+        }
+      }
+    },
+    {
+      "name": "Create Share Token - Success",
+      "endpoint": "POST /api/v1/projects/{project}/dashboards/{id}/share",
+      "status": 201,
+      "request": {
+        "expires_in": 86400,
+        "ip_restrictions": ["10.0.0.0/8"]
+      },
+      "response": {
+        "token_id": "550e8400-e29b-41d4-a716-446655440000",
+        "dashboard_id": "dashboard-model-serving-42a7c3",
+        "share_url": "https://dashboard.openshift-ai.svc/shared/550e8400-e29b-41d4-a716-446655440000",
+        "created_by": "stella@redhat.com",
+        "created_at": "2025-11-14T23:00:00Z",
+        "expires_at": "2025-11-15T23:00:00Z",
+        "permissions": ["read"],
+        "ip_restrictions": ["10.0.0.0/8"],
+        "revoked": false,
+        "revoked_at": null,
+        "revoked_by": null,
+        "usage_count": 0,
+        "last_used_at": null,
+        "last_used_ip": null
+      }
+    },
+    {
+      "name": "Create Share Token - Rate Limit Exceeded",
+      "endpoint": "POST /api/v1/projects/{project}/dashboards/{id}/share",
+      "status": 429,
+      "response": {
+        "error": {
+          "code": "SHARE_TOKEN_RATE_LIMIT",
+          "message": "Maximum 10 share tokens per hour exceeded for this dashboard",
+          "details": {
+            "tokens_created_in_last_hour": 10,
+            "retry_after_seconds": 1800
+          }
+        }
+      }
+    },
+    {
+      "name": "Access Shared Dashboard - Invalid Token",
+      "endpoint": "GET /api/v1/shared/{token}",
+      "status": 401,
+      "response": {
+        "error": {
+          "code": "INVALID_SHARE_TOKEN",
+          "message": "Share token is invalid, expired, or has been revoked"
+        }
+      }
+    },
+    {
+      "name": "Access Shared Dashboard - IP Restriction",
+      "endpoint": "GET /api/v1/shared/{token}",
+      "status": 403,
+      "response": {
+        "error": {
+          "code": "IP_RESTRICTION_VIOLATION",
+          "message": "Your IP address is not authorized to access this dashboard",
+          "details": {
+            "client_ip": "192.0.2.1",
+            "allowed_cidrs": ["10.0.0.0/8"]
+          }
+        }
+      }
+    },
+    {
+      "name": "Instantiate Template - Success",
+      "endpoint": "POST /api/v1/projects/{project}/dashboards/from-template",
+      "status": 201,
+      "headers": {
+        "Location": "/api/v1/projects/openshift-ai/dashboards/dashboard-template-instance-xyz"
+      },
+      "request": {
+        "template_id": "template-model-serving",
+        "dashboard_name": "My Custom Model Dashboard",
+        "variables": {
+          "namespace": "openshift-ai",
+          "model_name": "sentiment-analysis-v3"
+        }
+      },
+      "response": {
+        "id": "dashboard-template-instance-xyz",
+        "name": "My Custom Model Dashboard",
+        "project": "openshift-ai",
+        "created_at": "2025-11-14T23:30:00Z",
+        "created_by": "user@example.com",
+        "updated_at": "2025-11-14T23:30:00Z",
+        "updated_by": "user@example.com",
+        "version": 1,
+        "state": "active",
+        "template_id": "template-model-serving",
+        "refresh_interval": 15,
+        "time_range_default": "last_1h"
+      }
+    },
+    {
+      "name": "List Templates - Success",
+      "endpoint": "GET /api/v1/templates",
+      "status": 200,
+      "response": {
+        "templates": [
+          {
+            "id": "template-model-serving",
+            "name": "Model Serving Dashboard",
+            "description": "Real-time metrics for deployed model serving endpoints including inference latency, request rate, and resource utilization",
+            "category": "model_serving",
+            "version": "1.0.0",
+            "is_system": true,
+            "usage_count": 42,
+            "variables": {
+              "namespace": {
+                "type": "string",
+                "required": true
+              },
+              "model_name": {
+                "type": "string",
+                "required": true
+              }
+            }
+          },
+          {
+            "id": "template-training-job",
+            "name": "Training Job Dashboard",
+            "description": "Monitor training job progress with metrics for loss/accuracy, GPU utilization, and data throughput",
+            "category": "training_job",
+            "version": "1.0.0",
+            "is_system": true,
+            "usage_count": 28,
+            "variables": {
+              "namespace": {
+                "type": "string",
+                "required": true
+              },
+              "job_name": {
+                "type": "string",
+                "required": true
+              }
+            }
+          },
+          {
+            "id": "template-notebook",
+            "name": "Notebook Server Dashboard",
+            "description": "Notebook server resource monitoring including CPU, memory, and kernel status",
+            "category": "notebook",
+            "version": "1.0.0",
+            "is_system": true,
+            "usage_count": 15,
+            "variables": {
+              "namespace": {
+                "type": "string",
+                "required": true
+              },
+              "notebook_name": {
+                "type": "string",
+                "required": true
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Get User Preferences - Success",
+      "endpoint": "GET /api/v1/preferences",
+      "status": 200,
+      "response": {
+        "user_id": "stella@redhat.com",
+        "default_time_range": "last_1h",
+        "default_refresh_interval": 15,
+        "timezone": "America/New_York",
+        "favorite_dashboards": [
+          "dashboard-model-serving-42a7c3",
+          "dashboard-training-job-8f3b91"
+        ],
+        "recent_dashboards": [
+          {
+            "id": "dashboard-model-serving-42a7c3",
+            "viewed_at": "2025-11-14T23:00:00Z"
+          },
+          {
+            "id": "dashboard-training-job-8f3b91",
+            "viewed_at": "2025-11-14T22:45:00Z"
+          }
+        ],
+        "theme": "light"
+      }
+    },
+    {
+      "name": "Query Audit Logs - Success",
+      "endpoint": "GET /api/v1/audit/logs",
+      "status": 200,
+      "response": {
+        "logs": [
+          {
+            "id": 12345,
+            "timestamp": "2025-11-14T23:00:00.123Z",
+            "user_id": "stella@redhat.com",
+            "action": "dashboard.share",
+            "resource_type": "Dashboard",
+            "resource_id": "dashboard-model-serving-42a7c3",
+            "project_id": "openshift-ai",
+            "result": "success",
+            "client_ip": "10.0.1.42",
+            "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
+            "access_method": "rbac",
+            "token_id": null,
+            "metadata": {
+              "token_ttl": "24h",
+              "ip_restrictions": ["10.0.0.0/8"]
+            }
+          },
+          {
+            "id": 12344,
+            "timestamp": "2025-11-14T22:59:30.456Z",
+            "user_id": "stella@redhat.com",
+            "action": "dashboard.update",
+            "resource_type": "Dashboard",
+            "resource_id": "dashboard-model-serving-42a7c3",
+            "project_id": "openshift-ai",
+            "result": "success",
+            "client_ip": "10.0.1.42",
+            "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
+            "access_method": "rbac",
+            "token_id": null,
+            "metadata": {
+              "changed_fields": ["refresh_interval"],
+              "old_value": 30,
+              "new_value": 15
+            }
+          }
+        ],
+        "pagination": {
+          "total": 2,
+          "limit": 100,
+          "offset": 0,
+          "next_offset": null
+        }
+      }
+    },
+    {
+      "name": "Forbidden - Insufficient Permissions",
+      "endpoint": "POST /api/v1/projects/{project}/dashboards",
+      "status": 403,
+      "response": {
+        "error": {
+          "code": "FORBIDDEN",
+          "message": "User lacks required permission for this operation",
+          "details": {
+            "required_permission": "Dashboard:create",
+            "user_permissions": ["Dashboard:read"]
+          }
+        }
+      }
+    },
+    {
+      "name": "Rate Limit Exceeded",
+      "endpoint": "POST /api/v1/metrics/query",
+      "status": 429,
+      "headers": {
+        "X-RateLimit-Limit": "60",
+        "X-RateLimit-Remaining": "0",
+        "X-RateLimit-Reset": "1731628920",
+        "Retry-After": "60"
+      },
+      "response": {
+        "error": {
+          "code": "RATE_LIMIT_EXCEEDED",
+          "message": "Rate limit exceeded. Please retry after 60 seconds",
+          "details": {
+            "limit": 60,
+            "window_seconds": 60,
+            "retry_after_seconds": 60
+          }
+        }
+      }
+    },
+    {
+      "name": "Service Unavailable - Database Down",
+      "endpoint": "GET /api/v1/projects/{project}/dashboards",
+      "status": 503,
+      "headers": {
+        "Retry-After": "30"
+      },
+      "response": {
+        "error": {
+          "code": "SERVICE_UNAVAILABLE",
+          "message": "Database connection pool exhausted. Please retry in 30 seconds",
+          "details": {
+            "retry_after_seconds": 30
+          }
+        }
+      }
+    },
+    {
+      "name": "Metric Backend Unavailable",
+      "endpoint": "POST /api/v1/metrics/query",
+      "status": 503,
+      "response": {
+        "error": {
+          "code": "METRIC_BACKEND_UNAVAILABLE",
+          "message": "Metric backend is temporarily unavailable",
+          "details": {
+            "backend": "prometheus",
+            "retry_after_seconds": 30
+          }
+        }
+      }
+    }
+  ]
+}
