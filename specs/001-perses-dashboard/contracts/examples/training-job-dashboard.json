@@ -1,0 +1,355 @@
+{
+  "id": "dashboard-training-job-8f3b91",
+  "name": "NLP Model Training - Experiment 42",
+  "project": "ml-experiments",
+  "doc": {
+    "kind": "Dashboard",
+    "metadata": {
+      "name": "nlp-training-experiment-42",
+      "project": "ml-experiments",
+      "createdAt": "2025-11-14T20:00:00Z",
+      "version": 2
+    },
+    "spec": {
+      "display": {
+        "name": "NLP Model Training - Experiment 42",
+        "description": "Real-time training metrics for BERT fine-tuning job"
+      },
+      "datasources": {
+        "prometheus": {
+          "kind": "PrometheusDatasource",
+          "spec": {
+            "directUrl": "https://thanos-querier.openshift-monitoring.svc:9091"
+          }
+        }
+      },
+      "variables": [],
+      "panels": {
+        "panel-training-loss": {
+          "kind": "Panel",
+          "spec": {
+            "display": {
+              "name": "Training Loss",
+              "description": "Model training loss over time"
+            },
+            "plugin": {
+              "kind": "TimeSeriesChart",
+              "spec": {
+                "queries": [
+                  {
+                    "kind": "PrometheusTimeSeriesQuery",
+                    "spec": {
+                      "query": "training_loss{namespace=\"ml-experiments\",job=\"nlp-bert-experiment-42\"}",
+                      "legend": "Training Loss"
+                    }
+                  }
+                ],
+                "visual": {
+                  "yAxis": {
+                    "scale": "logarithmic",
+                    "unit": "loss"
+                  },
+                  "colors": ["#06C"]
+                }
+              }
+            }
+          }
+        },
+        "panel-training-accuracy": {
+          "kind": "Panel",
+          "spec": {
+            "display": {
+              "name": "Training Accuracy",
+              "description": "Model accuracy on training set"
+            },
+            "plugin": {
+              "kind": "TimeSeriesChart",
+              "spec": {
+                "queries": [
+                  {
+                    "kind": "PrometheusTimeSeriesQuery",
+                    "spec": {
+                      "query": "training_accuracy{namespace=\"ml-experiments\",job=\"nlp-bert-experiment-42\"}",
+                      "legend": "Accuracy"
+                    }
+                  }
+                ],
+                "visual": {
+                  "yAxis": {
+                    "scale": "linear",
+                    "unit": "percent"
+                  },
+                  "colors": ["#3E8635"]
+                }
+              }
+            }
+          }
+        },
+        "panel-gpu-utilization": {
+          "kind": "Panel",
+          "spec": {
+            "display": {
+              "name": "GPU Utilization",
+              "description": "GPU usage across training pods"
+            },
+            "plugin": {
+              "kind": "TimeSeriesChart",
+              "spec": {
+                "queries": [
+                  {
+                    "kind": "PrometheusTimeSeriesQuery",
+                    "spec": {
+                      "query": "avg by (pod) (DCGM_FI_DEV_GPU_UTIL{namespace=\"ml-experiments\",pod=~\"nlp-bert-.*\"})",
+                      "legend": "{{pod}}"
+                    }
+                  }
+                ],
+                "visual": {
+                  "yAxis": {
+                    "scale": "linear",
+                    "unit": "percent"
+                  },
+                  "thresholds": [
+                    {
+                      "value": 80,
+                      "color": "#F0AB00",
+                      "name": "warning"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "panel-gpu-memory": {
+          "kind": "Panel",
+          "spec": {
+            "display": {
+              "name": "GPU Memory Usage",
+              "description": "GPU memory consumption"
+            },
+            "plugin": {
+              "kind": "TimeSeriesChart",
+              "spec": {
+                "queries": [
+                  {
+                    "kind": "PrometheusTimeSeriesQuery",
+                    "spec": {
+                      "query": "avg by (pod) (DCGM_FI_DEV_FB_USED{namespace=\"ml-experiments\",pod=~\"nlp-bert-.*\"}) / (1024^3)",
+                      "legend": "{{pod}}"
+                    }
+                  }
+                ],
+                "visual": {
+                  "yAxis": {
+                    "scale": "linear",
+                    "unit": "GiB"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "panel-data-throughput": {
+          "kind": "Panel",
+          "spec": {
+            "display": {
+              "name": "Data Throughput",
+              "description": "Training samples processed per second"
+            },
+            "plugin": {
+              "kind": "TimeSeriesChart",
+              "spec": {
+                "queries": [
+                  {
+                    "kind": "PrometheusTimeSeriesQuery",
+                    "spec": {
+                      "query": "rate(training_samples_processed_total{namespace=\"ml-experiments\",job=\"nlp-bert-experiment-42\"}[5m])",
+                      "legend": "Samples/sec"
+                    }
+                  }
+                ],
+                "visual": {
+                  "yAxis": {
+                    "scale": "linear",
+                    "unit": "samples/s"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "panel-epoch-duration": {
+          "kind": "Panel",
+          "spec": {
+            "display": {
+              "name": "Epoch Duration",
+              "description": "Time to complete each training epoch"
+            },
+            "plugin": {
+              "kind": "BarChart",
+              "spec": {
+                "queries": [
+                  {
+                    "kind": "PrometheusTimeSeriesQuery",
+                    "spec": {
+                      "query": "epoch_duration_seconds{namespace=\"ml-experiments\",job=\"nlp-bert-experiment-42\"}",
+                      "legend": "Epoch {{epoch}}"
+                    }
+                  }
+                ],
+                "visual": {
+                  "yAxis": {
+                    "scale": "linear",
+                    "unit": "seconds"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "panel-current-epoch": {
+          "kind": "Panel",
+          "spec": {
+            "display": {
+              "name": "Current Epoch",
+              "description": "Current training epoch number"
+            },
+            "plugin": {
+              "kind": "StatPanel",
+              "spec": {
+                "queries": [
+                  {
+                    "kind": "PrometheusTimeSeriesQuery",
+                    "spec": {
+                      "query": "current_epoch{namespace=\"ml-experiments\",job=\"nlp-bert-experiment-42\"}"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "panel-learning-rate": {
+          "kind": "Panel",
+          "spec": {
+            "display": {
+              "name": "Learning Rate",
+              "description": "Current learning rate (with scheduler)"
+            },
+            "plugin": {
+              "kind": "TimeSeriesChart",
+              "spec": {
+                "queries": [
+                  {
+                    "kind": "PrometheusTimeSeriesQuery",
+                    "spec": {
+                      "query": "learning_rate{namespace=\"ml-experiments\",job=\"nlp-bert-experiment-42\"}",
+                      "legend": "Learning Rate"
+                    }
+                  }
+                ],
+                "visual": {
+                  "yAxis": {
+                    "scale": "logarithmic",
+                    "unit": "lr"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "layouts": [
+        {
+          "kind": "Grid",
+          "spec": {
+            "items": [
+              {
+                "x": 0,
+                "y": 0,
+                "width": 6,
+                "height": 6,
+                "content": {
+                  "$ref": "#/spec/panels/panel-training-loss"
+                }
+              },
+              {
+                "x": 6,
+                "y": 0,
+                "width": 6,
+                "height": 6,
+                "content": {
+                  "$ref": "#/spec/panels/panel-training-accuracy"
+                }
+              },
+              {
+                "x": 0,
+                "y": 6,
+                "width": 3,
+                "height": 4,
+                "content": {
+                  "$ref": "#/spec/panels/panel-current-epoch"
+                }
+              },
+              {
+                "x": 3,
+                "y": 6,
+                "width": 9,
+                "height": 6,
+                "content": {
+                  "$ref": "#/spec/panels/panel-epoch-duration"
+                }
+              },
+              {
+                "x": 0,
+                "y": 12,
+                "width": 6,
+                "height": 6,
+                "content": {
+                  "$ref": "#/spec/panels/panel-gpu-utilization"
+                }
+              },
+              {
+                "x": 6,
+                "y": 12,
+                "width": 6,
+                "height": 6,
+                "content": {
+                  "$ref": "#/spec/panels/panel-gpu-memory"
+                }
+              },
+              {
+                "x": 0,
+                "y": 18,
+                "width": 6,
+                "height": 6,
+                "content": {
+                  "$ref": "#/spec/panels/panel-data-throughput"
+                }
+              },
+              {
+                "x": 6,
+                "y": 18,
+                "width": 6,
+                "height": 6,
+                "content": {
+                  "$ref": "#/spec/panels/panel-learning-rate"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "created_at": "2025-11-14T20:00:00Z",
+  "created_by": "data-scientist@example.com",
+  "updated_at": "2025-11-14T22:30:00Z",
+  "updated_by": "data-scientist@example.com",
+  "version": 2,
+  "state": "active",
+  "template_id": "template-training-job",
+  "refresh_interval": 30,
+  "time_range_default": "last_6h"
+}

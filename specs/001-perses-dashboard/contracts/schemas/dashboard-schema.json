@@ -1,0 +1,594 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://openshift-ai.redhat.com/schemas/dashboard/v1/dashboard.json",
+  "title": "Dashboard",
+  "description": "OpenShift AI Observability Dashboard schema (extends Perses Dashboard)",
+  "type": "object",
+  "required": [
+    "id",
+    "name",
+    "project",
+    "doc",
+    "created_at",
+    "created_by",
+    "updated_at",
+    "updated_by",
+    "version",
+    "state"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Dashboard unique identifier (UUID v4 format)",
+      "pattern": "^dashboard-[a-z0-9]{6,}$",
+      "examples": ["dashboard-abc123", "dashboard-xyz789"]
+    },
+    "name": {
+      "type": "string",
+      "description": "Human-readable dashboard name (unique within project)",
+      "minLength": 1,
+      "maxLength": 128,
+      "examples": ["Model Serving Overview", "Training Job Metrics"]
+    },
+    "project": {
+      "type": "string",
+      "description": "Project/namespace identifier (Kubernetes DNS-1123 subdomain)",
+      "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$",
+      "minLength": 1,
+      "maxLength": 128,
+      "examples": ["openshift-ai", "my-project"]
+    },
+    "doc": {
+      "$ref": "#/definitions/PersesDefinition",
+      "description": "Complete Perses Dashboard JSON definition (panels, layout, datasources)"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Dashboard creation timestamp (UTC, ISO 8601)",
+      "examples": ["2025-11-14T22:00:00Z"]
+    },
+    "created_by": {
+      "type": "string",
+      "description": "User identity who created the dashboard (OpenShift username or email)",
+      "minLength": 1,
+      "maxLength": 256,
+      "examples": ["stella@redhat.com", "user@example.com"]
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Last modification timestamp (UTC, ISO 8601)",
+      "examples": ["2025-11-14T23:00:00Z"]
+    },
+    "updated_by": {
+      "type": "string",
+      "description": "User identity who last modified the dashboard",
+      "minLength": 1,
+      "maxLength": 256,
+      "examples": ["stella@redhat.com", "user@example.com"]
+    },
+    "version": {
+      "type": "integer",
+      "description": "Version number for optimistic locking (increments on each update)",
+      "minimum": 1,
+      "examples": [1, 2, 5]
+    },
+    "state": {
+      "type": "string",
+      "description": "Dashboard lifecycle state",
+      "enum": ["draft", "active", "archived"],
+      "examples": ["active"]
+    },
+    "template_id": {
+      "type": ["string", "null"],
+      "description": "Template ID if dashboard was created from a template",
+      "pattern": "^template-[a-z0-9-]+$",
+      "examples": ["template-model-serving", "template-training-job", null]
+    },
+    "refresh_interval": {
+      "type": "integer",
+      "description": "Metric refresh interval in seconds (FR-002: 5-300s range)",
+      "minimum": 5,
+      "maximum": 300,
+      "default": 15,
+      "examples": [15, 30, 60]
+    },
+    "time_range_default": {
+      "type": "string",
+      "description": "Default time range for dashboard visualization (FR-008)",
+      "enum": [
+        "last_5m",
+        "last_15m",
+        "last_1h",
+        "last_6h",
+        "last_24h",
+        "last_7d",
+        "last_30d"
+      ],
+      "default": "last_1h",
+      "examples": ["last_1h", "last_24h"]
+    }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "PersesDefinition": {
+      "type": "object",
+      "description": "Perses Dashboard JSON definition (see Perses schema specification)",
+      "required": ["kind", "metadata", "spec"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "Dashboard",
+          "description": "Perses resource type (always 'Dashboard')"
+        },
+        "metadata": {
+          "$ref": "#/definitions/DashboardMetadata"
+        },
+        "spec": {
+          "$ref": "#/definitions/DashboardSpec"
+        }
+      },
+      "additionalProperties": false
+    },
+    "DashboardMetadata": {
+      "type": "object",
+      "description": "Dashboard metadata section (Perses pattern)",
+      "required": ["name", "project"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Dashboard identifier (kebab-case)",
+          "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$",
+          "examples": ["model-serving-overview", "training-job-metrics"]
+        },
+        "project": {
+          "type": "string",
+          "description": "Project/namespace identifier",
+          "examples": ["openshift-ai", "my-project"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Creation timestamp (embedded in Perses doc)"
+        },
+        "version": {
+          "type": "integer",
+          "description": "Embedded version number",
+          "minimum": 1
+        }
+      },
+      "additionalProperties": true
+    },
+    "DashboardSpec": {
+      "type": "object",
+      "description": "Dashboard specification (panels, layout, datasources)",
+      "required": ["display"],
+      "properties": {
+        "display": {
+          "$ref": "#/definitions/DisplaySettings"
+        },
+        "datasources": {
+          "type": "object",
+          "description": "Datasource definitions (Prometheus, Thanos, etc.)",
+          "additionalProperties": {
+            "$ref": "#/definitions/Datasource"
+          },
+          "examples": [
+            {
+              "prometheus": {
+                "kind": "PrometheusDatasource",
+                "spec": {
+                  "directUrl": "https://thanos-querier.openshift-monitoring.svc:9091"
+                }
+              }
+            }
+          ]
+        },
+        "variables": {
+          "type": "array",
+          "description": "Dashboard variables for dynamic queries (Perses pattern)",
+          "items": {
+            "type": "object"
+          },
+          "default": []
+        },
+        "panels": {
+          "type": "object",
+          "description": "Map of panel ID to panel definition",
+          "additionalProperties": {
+            "$ref": "#/definitions/ChartPanel"
+          }
+        },
+        "layouts": {
+          "type": "array",
+          "description": "Dashboard layout definitions (responsive grid)",
+          "items": {
+            "$ref": "#/definitions/Layout"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "DisplaySettings": {
+      "type": "object",
+      "description": "Dashboard display settings",
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "User-visible dashboard name",
+          "minLength": 1,
+          "maxLength": 128,
+          "examples": ["Model Serving Overview"]
+        },
+        "description": {
+          "type": "string",
+          "description": "Dashboard description (optional)",
+          "maxLength": 500,
+          "examples": ["Real-time metrics for deployed ML models"]
+        }
+      }
+    },
+    "Datasource": {
+      "type": "object",
+      "description": "Datasource definition (Perses plugin pattern)",
+      "required": ["kind", "spec"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "description": "Datasource type",
+          "enum": ["PrometheusDatasource", "ThanosDatasource"],
+          "examples": ["PrometheusDatasource"]
+        },
+        "spec": {
+          "type": "object",
+          "description": "Datasource-specific configuration",
+          "properties": {
+            "directUrl": {
+              "type": "string",
+              "format": "uri",
+              "description": "Direct URL to datasource API",
+              "examples": [
+                "https://thanos-querier.openshift-monitoring.svc:9091",
+                "http://prometheus-k8s.openshift-monitoring.svc:9090"
+              ]
+            }
+          },
+          "required": ["directUrl"]
+        }
+      }
+    },
+    "ChartPanel": {
+      "type": "object",
+      "description": "Individual chart panel definition (FR-004: chart types)",
+      "required": ["kind", "spec"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "Panel",
+          "description": "Perses resource type (always 'Panel')"
+        },
+        "spec": {
+          "$ref": "#/definitions/PanelSpec"
+        }
+      }
+    },
+    "PanelSpec": {
+      "type": "object",
+      "description": "Panel specification (display settings and plugin)",
+      "required": ["display", "plugin"],
+      "properties": {
+        "display": {
+          "type": "object",
+          "required": ["name"],
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "User-visible panel title",
+              "minLength": 1,
+              "maxLength": 128,
+              "examples": ["Inference Latency (p95)", "CPU Utilization"]
+            },
+            "description": {
+              "type": "string",
+              "description": "Panel description (optional)",
+              "maxLength": 300
+            }
+          }
+        },
+        "plugin": {
+          "$ref": "#/definitions/ChartPlugin"
+        }
+      }
+    },
+    "ChartPlugin": {
+      "type": "object",
+      "description": "Chart plugin definition (FR-004: supported chart types)",
+      "required": ["kind", "spec"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "description": "Chart type (Perses chart plugin)",
+          "enum": [
+            "TimeSeriesChart",
+            "GaugeChart",
+            "StatPanel",
+            "TableView",
+            "BarChart"
+          ],
+          "examples": ["TimeSeriesChart"]
+        },
+        "spec": {
+          "$ref": "#/definitions/ChartPluginSpec"
+        }
+      }
+    },
+    "ChartPluginSpec": {
+      "type": "object",
+      "description": "Chart plugin specification (queries and visualization)",
+      "required": ["queries"],
+      "properties": {
+        "queries": {
+          "type": "array",
+          "description": "Array of metric query definitions",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/definitions/MetricQuery"
+          }
+        },
+        "visual": {
+          "type": "object",
+          "description": "Visualization properties (colors, thresholds, axes) - FR-018",
+          "properties": {
+            "colors": {
+              "type": "array",
+              "description": "Color palette for series",
+              "items": {
+                "type": "string",
+                "pattern": "^#[0-9A-Fa-f]{6}$"
+              }
+            },
+            "thresholds": {
+              "type": "array",
+              "description": "Threshold definitions for visual indicators",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "value": {
+                    "type": "number"
+                  },
+                  "color": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string",
+                    "enum": ["warning", "critical"]
+                  }
+                }
+              }
+            },
+            "yAxis": {
+              "type": "object",
+              "description": "Y-axis configuration",
+              "properties": {
+                "scale": {
+                  "type": "string",
+                  "enum": ["linear", "logarithmic"],
+                  "default": "linear"
+                },
+                "unit": {
+                  "type": "string",
+                  "description": "Unit of measurement",
+                  "examples": ["seconds", "bytes", "percent"]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "MetricQuery": {
+      "type": "object",
+      "description": "Metric query definition (FR-007: label filtering, FR-011: aggregations)",
+      "required": ["kind", "spec"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "PrometheusTimeSeriesQuery",
+          "description": "Query type (Prometheus/Thanos)"
+        },
+        "spec": {
+          "$ref": "#/definitions/MetricQuerySpec"
+        }
+      }
+    },
+    "MetricQuerySpec": {
+      "type": "object",
+      "description": "Metric query specification (PromQL)",
+      "required": ["query"],
+      "properties": {
+        "query": {
+          "type": "string",
+          "description": "PromQL query string (must include namespace filter for security - FR-007)",
+          "minLength": 1,
+          "maxLength": 1000,
+          "examples": [
+            "histogram_quantile(0.95, rate(model_inference_duration_seconds_bucket{namespace=\"openshift-ai\"}[5m]))",
+            "sum by (workload) (rate(container_cpu_usage_seconds_total{namespace=\"openshift-ai\"}[5m]))"
+          ]
+        },
+        "minStep": {
+          "type": "string",
+          "description": "Minimum query resolution (duration format)",
+          "pattern": "^\\d+[smhd]$",
+          "examples": ["15s", "1m", "5m"]
+        },
+        "legend": {
+          "type": "string",
+          "description": "Legend template for series labels",
+          "examples": ["{{workload}}", "Latency - {{pod}}"]
+        },
+        "datasource": {
+          "type": "object",
+          "description": "Datasource reference (optional, defaults to 'prometheus')",
+          "properties": {
+            "name": {
+              "type": "string",
+              "examples": ["prometheus", "thanos"]
+            }
+          }
+        }
+      }
+    },
+    "Layout": {
+      "type": "object",
+      "description": "Dashboard layout definition (FR-015: responsive rendering)",
+      "required": ["kind", "spec"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "Grid",
+          "description": "Layout type (currently only Grid supported)"
+        },
+        "spec": {
+          "type": "object",
+          "required": ["items"],
+          "properties": {
+            "items": {
+              "type": "array",
+              "description": "Grid items (panel placements)",
+              "items": {
+                "$ref": "#/definitions/GridItem"
+              }
+            }
+          }
+        }
+      }
+    },
+    "GridItem": {
+      "type": "object",
+      "description": "Grid item placement (responsive 12-column grid)",
+      "required": ["x", "y", "width", "height", "content"],
+      "properties": {
+        "x": {
+          "type": "integer",
+          "description": "X position (0-11, 12-column grid)",
+          "minimum": 0,
+          "maximum": 11
+        },
+        "y": {
+          "type": "integer",
+          "description": "Y position (row)",
+          "minimum": 0
+        },
+        "width": {
+          "type": "integer",
+          "description": "Width in grid units (1-12)",
+          "minimum": 1,
+          "maximum": 12
+        },
+        "height": {
+          "type": "integer",
+          "description": "Height in grid units",
+          "minimum": 1,
+          "maximum": 24
+        },
+        "content": {
+          "type": "object",
+          "description": "Panel reference (JSON pointer)",
+          "required": ["$ref"],
+          "properties": {
+            "$ref": {
+              "type": "string",
+              "description": "JSON pointer to panel definition",
+              "pattern": "^#/spec/panels/[a-z0-9-]+$",
+              "examples": ["#/spec/panels/panel-1", "#/spec/panels/panel-cpu"]
+            }
+          }
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "id": "dashboard-abc123",
+      "name": "Model Serving Overview",
+      "project": "openshift-ai",
+      "doc": {
+        "kind": "Dashboard",
+        "metadata": {
+          "name": "model-serving-overview",
+          "project": "openshift-ai",
+          "createdAt": "2025-11-14T22:00:00Z",
+          "version": 1
+        },
+        "spec": {
+          "display": {
+            "name": "Model Serving Overview",
+            "description": "Real-time metrics for deployed models"
+          },
+          "datasources": {
+            "prometheus": {
+              "kind": "PrometheusDatasource",
+              "spec": {
+                "directUrl": "https://thanos-querier.openshift-monitoring.svc:9091"
+              }
+            }
+          },
+          "variables": [],
+          "panels": {
+            "panel-1": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Inference Latency (p95)"
+                },
+                "plugin": {
+                  "kind": "TimeSeriesChart",
+                  "spec": {
+                    "queries": [
+                      {
+                        "kind": "PrometheusTimeSeriesQuery",
+                        "spec": {
+                          "query": "histogram_quantile(0.95, rate(model_inference_duration_seconds_bucket{namespace=\"openshift-ai\"}[5m]))"
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "layouts": [
+            {
+              "kind": "Grid",
+              "spec": {
+                "items": [
+                  {
+                    "x": 0,
+                    "y": 0,
+                    "width": 12,
+                    "height": 6,
+                    "content": {
+                      "$ref": "#/spec/panels/panel-1"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "created_at": "2025-11-14T22:00:00Z",
+      "created_by": "stella@redhat.com",
+      "updated_at": "2025-11-14T23:00:00Z",
+      "updated_by": "stella@redhat.com",
+      "version": 1,
+      "state": "active",
+      "template_id": "template-model-serving",
+      "refresh_interval": 15,
+      "time_range_default": "last_1h"
+    }
+  ]
+}

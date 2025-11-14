@@ -1,0 +1,320 @@
+{
+  "id": "dashboard-model-serving-42a7c3",
+  "name": "Sentiment Analysis Model - Production Metrics",
+  "project": "openshift-ai",
+  "doc": {
+    "kind": "Dashboard",
+    "metadata": {
+      "name": "sentiment-analysis-prod-metrics",
+      "project": "openshift-ai",
+      "createdAt": "2025-11-14T22:00:00Z",
+      "version": 1
+    },
+    "spec": {
+      "display": {
+        "name": "Sentiment Analysis Model - Production Metrics",
+        "description": "Real-time performance metrics for sentiment-analysis-v2 model serving endpoint"
+      },
+      "datasources": {
+        "prometheus": {
+          "kind": "PrometheusDatasource",
+          "spec": {
+            "directUrl": "https://thanos-querier.openshift-monitoring.svc:9091"
+          }
+        }
+      },
+      "variables": [],
+      "panels": {
+        "panel-latency-p95": {
+          "kind": "Panel",
+          "spec": {
+            "display": {
+              "name": "Inference Latency (p95)",
+              "description": "95th percentile inference latency over 5-minute window"
+            },
+            "plugin": {
+              "kind": "TimeSeriesChart",
+              "spec": {
+                "queries": [
+                  {
+                    "kind": "PrometheusTimeSeriesQuery",
+                    "spec": {
+                      "query": "histogram_quantile(0.95, rate(model_inference_duration_seconds_bucket{namespace=\"openshift-ai\",model=\"sentiment-analysis-v2\"}[5m]))",
+                      "legend": "p95 Latency"
+                    }
+                  }
+                ],
+                "visual": {
+                  "yAxis": {
+                    "scale": "linear",
+                    "unit": "seconds"
+                  },
+                  "thresholds": [
+                    {
+                      "value": 0.2,
+                      "color": "#F0AB00",
+                      "name": "warning"
+                    },
+                    {
+                      "value": 0.5,
+                      "color": "#C9190B",
+                      "name": "critical"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "panel-request-rate": {
+          "kind": "Panel",
+          "spec": {
+            "display": {
+              "name": "Request Rate",
+              "description": "HTTP requests per second to model endpoint"
+            },
+            "plugin": {
+              "kind": "TimeSeriesChart",
+              "spec": {
+                "queries": [
+                  {
+                    "kind": "PrometheusTimeSeriesQuery",
+                    "spec": {
+                      "query": "sum(rate(http_requests_total{namespace=\"openshift-ai\",model=\"sentiment-analysis-v2\"}[5m])) by (status)",
+                      "legend": "{{status}}"
+                    }
+                  }
+                ],
+                "visual": {
+                  "yAxis": {
+                    "scale": "linear",
+                    "unit": "reqps"
+                  },
+                  "colors": [
+                    "#06C",
+                    "#73C5C5",
+                    "#8BC1F7",
+                    "#BDE2FF"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "panel-error-rate": {
+          "kind": "Panel",
+          "spec": {
+            "display": {
+              "name": "Error Rate",
+              "description": "Percentage of failed requests (5xx status codes)"
+            },
+            "plugin": {
+              "kind": "StatPanel",
+              "spec": {
+                "queries": [
+                  {
+                    "kind": "PrometheusTimeSeriesQuery",
+                    "spec": {
+                      "query": "100 * sum(rate(http_requests_total{namespace=\"openshift-ai\",model=\"sentiment-analysis-v2\",status=~\"5..\"}[5m])) / sum(rate(http_requests_total{namespace=\"openshift-ai\",model=\"sentiment-analysis-v2\"}[5m]))"
+                    }
+                  }
+                ],
+                "visual": {
+                  "thresholds": [
+                    {
+                      "value": 1,
+                      "color": "#F0AB00",
+                      "name": "warning"
+                    },
+                    {
+                      "value": 5,
+                      "color": "#C9190B",
+                      "name": "critical"
+                    }
+                  ],
+                  "yAxis": {
+                    "unit": "percent"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "panel-cpu-usage": {
+          "kind": "Panel",
+          "spec": {
+            "display": {
+              "name": "CPU Utilization",
+              "description": "CPU usage across all model serving pods"
+            },
+            "plugin": {
+              "kind": "TimeSeriesChart",
+              "spec": {
+                "queries": [
+                  {
+                    "kind": "PrometheusTimeSeriesQuery",
+                    "spec": {
+                      "query": "sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=\"openshift-ai\",pod=~\"sentiment-analysis-.*\"}[5m]))",
+                      "legend": "{{pod}}"
+                    }
+                  }
+                ],
+                "visual": {
+                  "yAxis": {
+                    "scale": "linear",
+                    "unit": "cores"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "panel-memory-usage": {
+          "kind": "Panel",
+          "spec": {
+            "display": {
+              "name": "Memory Usage",
+              "description": "Memory consumption across all model serving pods"
+            },
+            "plugin": {
+              "kind": "TimeSeriesChart",
+              "spec": {
+                "queries": [
+                  {
+                    "kind": "PrometheusTimeSeriesQuery",
+                    "spec": {
+                      "query": "sum by (pod) (container_memory_usage_bytes{namespace=\"openshift-ai\",pod=~\"sentiment-analysis-.*\"}) / (1024^3)",
+                      "legend": "{{pod}}"
+                    }
+                  }
+                ],
+                "visual": {
+                  "yAxis": {
+                    "scale": "linear",
+                    "unit": "GiB"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "panel-throughput": {
+          "kind": "Panel",
+          "spec": {
+            "display": {
+              "name": "Model Throughput",
+              "description": "Current requests per second (instant value)"
+            },
+            "plugin": {
+              "kind": "GaugeChart",
+              "spec": {
+                "queries": [
+                  {
+                    "kind": "PrometheusTimeSeriesQuery",
+                    "spec": {
+                      "query": "sum(rate(http_requests_total{namespace=\"openshift-ai\",model=\"sentiment-analysis-v2\"}[1m]))"
+                    }
+                  }
+                ],
+                "visual": {
+                  "thresholds": [
+                    {
+                      "value": 0,
+                      "color": "#3E8635",
+                      "name": "normal"
+                    },
+                    {
+                      "value": 80,
+                      "color": "#F0AB00",
+                      "name": "warning"
+                    },
+                    {
+                      "value": 100,
+                      "color": "#C9190B",
+                      "name": "critical"
+                    }
+                  ],
+                  "yAxis": {
+                    "unit": "reqps"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "layouts": [
+        {
+          "kind": "Grid",
+          "spec": {
+            "items": [
+              {
+                "x": 0,
+                "y": 0,
+                "width": 8,
+                "height": 6,
+                "content": {
+                  "$ref": "#/spec/panels/panel-latency-p95"
+                }
+              },
+              {
+                "x": 8,
+                "y": 0,
+                "width": 4,
+                "height": 6,
+                "content": {
+                  "$ref": "#/spec/panels/panel-throughput"
+                }
+              },
+              {
+                "x": 0,
+                "y": 6,
+                "width": 8,
+                "height": 6,
+                "content": {
+                  "$ref": "#/spec/panels/panel-request-rate"
+                }
+              },
+              {
+                "x": 8,
+                "y": 6,
+                "width": 4,
+                "height": 6,
+                "content": {
+                  "$ref": "#/spec/panels/panel-error-rate"
+                }
+              },
+              {
+                "x": 0,
+                "y": 12,
+                "width": 6,
+                "height": 6,
+                "content": {
+                  "$ref": "#/spec/panels/panel-cpu-usage"
+                }
+              },
+              {
+                "x": 6,
+                "y": 12,
+                "width": 6,
+                "height": 6,
+                "content": {
+                  "$ref": "#/spec/panels/panel-memory-usage"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "created_at": "2025-11-14T22:00:00Z",
+  "created_by": "stella@redhat.com",
+  "updated_at": "2025-11-14T23:00:00Z",
+  "updated_by": "stella@redhat.com",
+  "version": 1,
+  "state": "active",
+  "template_id": "template-model-serving",
+  "refresh_interval": 15,
+  "time_range_default": "last_1h"
+}

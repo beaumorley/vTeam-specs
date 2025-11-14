@@ -1,0 +1,254 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://openshift-ai.redhat.com/schemas/dashboard/v1/share-token.json",
+  "title": "Share Token",
+  "description": "Schema for dashboard share token management (FR-020, SC-010)",
+  "definitions": {
+    "ShareToken": {
+      "type": "object",
+      "description": "Ephemeral read-only share token for anonymous dashboard access",
+      "required": [
+        "token_id",
+        "dashboard_id",
+        "created_by",
+        "created_at",
+        "expires_at",
+        "permissions",
+        "revoked"
+      ],
+      "properties": {
+        "token_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Share token UUID (v4, non-sequential for security)",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "examples": [
+            "550e8400-e29b-41d4-a716-446655440000",
+            "f47ac10b-58cc-4372-a567-0e02b2c3d479"
+          ]
+        },
+        "dashboard_id": {
+          "type": "string",
+          "description": "Dashboard identifier this token grants access to",
+          "pattern": "^dashboard-[a-z0-9]{6,}$",
+          "examples": ["dashboard-abc123", "dashboard-xyz789"]
+        },
+        "share_url": {
+          "type": "string",
+          "format": "uri",
+          "description": "Complete share URL for easy copying and sharing",
+          "examples": [
+            "https://dashboard.openshift-ai.svc/shared/550e8400-e29b-41d4-a716-446655440000",
+            "https://console.openshift.com/ai/dashboards/shared/f47ac10b-58cc-4372-a567-0e02b2c3d479"
+          ]
+        },
+        "created_by": {
+          "type": "string",
+          "description": "User who generated the token (must have Dashboard:share permission)",
+          "minLength": 1,
+          "maxLength": 256,
+          "examples": ["stella@redhat.com", "admin@example.com"]
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Token creation timestamp (UTC, ISO 8601)",
+          "examples": ["2025-11-14T23:00:00Z"]
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Token expiration timestamp (24h default, 7d max)",
+          "examples": ["2025-11-15T23:00:00Z", "2025-11-21T23:00:00Z"]
+        },
+        "permissions": {
+          "type": "array",
+          "description": "Granted permissions (MVP: read-only, future: edit)",
+          "items": {
+            "type": "string",
+            "enum": ["read"]
+          },
+          "minItems": 1,
+          "uniqueItems": true,
+          "examples": [["read"]]
+        },
+        "ip_restrictions": {
+          "type": ["array", "null"],
+          "description": "Optional IP whitelist in CIDR notation (security enhancement)",
+          "items": {
+            "type": "string",
+            "format": "cidr",
+            "pattern": "^(([0-9]{1,3}\\.){3}[0-9]{1,3}/(\\d|[12]\\d|3[0-2]))|(([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}/\\d{1,3})$"
+          },
+          "examples": [
+            ["10.0.0.0/8", "203.0.113.0/24"],
+            ["192.168.1.0/24"],
+            null
+          ]
+        },
+        "revoked": {
+          "type": "boolean",
+          "description": "Token revocation status (revoked tokens cannot be used)",
+          "examples": [false, true]
+        },
+        "revoked_at": {
+          "type": ["string", "null"],
+          "format": "date-time",
+          "description": "Token revocation timestamp (null if not revoked)",
+          "examples": ["2025-11-14T23:30:00Z", null]
+        },
+        "revoked_by": {
+          "type": ["string", "null"],
+          "description": "User who revoked the token (null if not revoked)",
+          "examples": ["stella@redhat.com", null]
+        },
+        "usage_count": {
+          "type": "integer",
+          "description": "Number of times token has been used for dashboard access",
+          "minimum": 0,
+          "examples": [0, 5, 42]
+        },
+        "last_used_at": {
+          "type": ["string", "null"],
+          "format": "date-time",
+          "description": "Last usage timestamp (null if never used)",
+          "examples": ["2025-11-14T23:30:00Z", null]
+        },
+        "last_used_ip": {
+          "type": ["string", "null"],
+          "description": "IP address of last usage (null if never used)",
+          "format": "ipv4",
+          "examples": ["10.0.1.42", "203.0.113.5", null]
+        }
+      },
+      "additionalProperties": false,
+      "examples": [
+        {
+          "token_id": "550e8400-e29b-41d4-a716-446655440000",
+          "dashboard_id": "dashboard-abc123",
+          "share_url": "https://dashboard.openshift-ai.svc/shared/550e8400-e29b-41d4-a716-446655440000",
+          "created_by": "stella@redhat.com",
+          "created_at": "2025-11-14T23:00:00Z",
+          "expires_at": "2025-11-15T23:00:00Z",
+          "permissions": ["read"],
+          "ip_restrictions": ["10.0.0.0/8"],
+          "revoked": false,
+          "revoked_at": null,
+          "revoked_by": null,
+          "usage_count": 5,
+          "last_used_at": "2025-11-14T23:30:00Z",
+          "last_used_ip": "10.0.1.42"
+        }
+      ]
+    },
+    "ShareTokenCreateRequest": {
+      "type": "object",
+      "description": "Request to create a new share token",
+      "required": ["expires_in"],
+      "properties": {
+        "expires_in": {
+          "type": "integer",
+          "description": "Token lifetime in seconds (min: 60, max: 604800 = 7 days)",
+          "minimum": 60,
+          "maximum": 604800,
+          "examples": [
+            86400,
+            3600,
+            604800
+          ]
+        },
+        "ip_restrictions": {
+          "type": ["array", "null"],
+          "description": "Optional IP whitelist in CIDR notation",
+          "items": {
+            "type": "string",
+            "format": "cidr",
+            "pattern": "^(([0-9]{1,3}\\.){3}[0-9]{1,3}/(\\d|[12]\\d|3[0-2]))|(([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}/\\d{1,3})$"
+          },
+          "maxItems": 10,
+          "examples": [
+            ["10.0.0.0/8", "203.0.113.0/24"],
+            ["192.168.1.0/24"],
+            null
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "examples": [
+        {
+          "expires_in": 86400
+        },
+        {
+          "expires_in": 604800,
+          "ip_restrictions": ["10.0.0.0/8", "203.0.113.0/24"]
+        },
+        {
+          "expires_in": 3600,
+          "ip_restrictions": null
+        }
+      ]
+    },
+    "ShareTokenValidationRequest": {
+      "type": "object",
+      "description": "Request to validate and use a share token (internal, not exposed in API)",
+      "required": ["token_id", "client_ip"],
+      "properties": {
+        "token_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Token UUID to validate"
+        },
+        "client_ip": {
+          "type": "string",
+          "description": "Client IP address for IP restriction enforcement",
+          "oneOf": [
+            {
+              "format": "ipv4"
+            },
+            {
+              "format": "ipv6"
+            }
+          ],
+          "examples": ["10.0.1.42", "203.0.113.5", "2001:db8::1"]
+        }
+      }
+    },
+    "ShareTokenValidationResponse": {
+      "type": "object",
+      "description": "Response from token validation (internal, not exposed in API)",
+      "required": ["valid", "dashboard_id"],
+      "properties": {
+        "valid": {
+          "type": "boolean",
+          "description": "Whether token is valid and can be used"
+        },
+        "dashboard_id": {
+          "type": ["string", "null"],
+          "description": "Dashboard ID if token is valid, null otherwise"
+        },
+        "error_code": {
+          "type": "string",
+          "description": "Error code if token is invalid",
+          "enum": [
+            "TOKEN_NOT_FOUND",
+            "TOKEN_EXPIRED",
+            "TOKEN_REVOKED",
+            "IP_RESTRICTION_VIOLATION"
+          ]
+        },
+        "error_message": {
+          "type": "string",
+          "description": "Human-readable error message if token is invalid"
+        }
+      }
+    }
+  },
+  "oneOf": [
+    {
+      "$ref": "#/definitions/ShareToken"
+    },
+    {
+      "$ref": "#/definitions/ShareTokenCreateRequest"
+    }
+  ]
+}

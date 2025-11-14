@@ -1,0 +1,285 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://openshift-ai.redhat.com/schemas/dashboard/v1/error-response.json",
+  "title": "Error Response",
+  "description": "Standard error response format for all API endpoints",
+  "type": "object",
+  "required": ["error"],
+  "properties": {
+    "error": {
+      "type": "object",
+      "description": "Error details object",
+      "required": ["code", "message"],
+      "properties": {
+        "code": {
+          "type": "string",
+          "description": "Machine-readable error code (SCREAMING_SNAKE_CASE)",
+          "pattern": "^[A-Z][A-Z0-9_]*$",
+          "examples": [
+            "INVALID_REQUEST",
+            "UNAUTHORIZED",
+            "FORBIDDEN",
+            "NOT_FOUND",
+            "VERSION_CONFLICT",
+            "DASHBOARD_NAME_CONFLICT",
+            "INVALID_DASHBOARD_SCHEMA",
+            "NAMESPACE_FILTER_REQUIRED",
+            "INVALID_PROMQL",
+            "METRIC_BACKEND_UNAVAILABLE",
+            "RATE_LIMIT_EXCEEDED",
+            "SHARE_TOKEN_RATE_LIMIT",
+            "INVALID_SHARE_TOKEN",
+            "IP_RESTRICTION_VIOLATION",
+            "INTERNAL_ERROR",
+            "SERVICE_UNAVAILABLE"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "description": "Human-readable error message (English, user-friendly)",
+          "minLength": 1,
+          "maxLength": 500,
+          "examples": [
+            "Invalid request parameters",
+            "Authentication required. Please provide a valid OpenShift OAuth token in the Authorization header",
+            "User lacks required permission for this operation",
+            "Dashboard not found",
+            "Dashboard was modified by another user. Current version is 3, provided version is 1",
+            "Dashboard with name 'Model Serving Overview' already exists in project 'openshift-ai'",
+            "Dashboard schema validation failed",
+            "Metric query must include namespace filter for security",
+            "Invalid PromQL query syntax",
+            "Metric backend is temporarily unavailable",
+            "Rate limit exceeded. Please retry after 60 seconds",
+            "Maximum 10 share tokens per hour exceeded for this dashboard",
+            "Share token is invalid, expired, or has been revoked",
+            "Your IP address is not authorized to access this dashboard",
+            "An unexpected error occurred. Please contact support if the issue persists",
+            "Database connection pool exhausted. Please retry in 30 seconds"
+          ]
+        },
+        "details": {
+          "type": ["object", "null"],
+          "description": "Additional error context (optional, structure varies by error type)",
+          "additionalProperties": true,
+          "examples": [
+            {
+              "field": "refresh_interval",
+              "error": "Value must be between 5 and 300"
+            },
+            {
+              "required_permission": "Dashboard:create",
+              "user_permissions": ["Dashboard:read"]
+            },
+            {
+              "dashboard_id": "dashboard-xyz789"
+            },
+            {
+              "current_version": 3,
+              "provided_version": 1,
+              "last_updated_by": "user@example.com",
+              "last_updated_at": "2025-11-14T23:30:00Z"
+            },
+            {
+              "existing_dashboard_id": "dashboard-xyz789"
+            },
+            {
+              "validation_errors": [
+                {
+                  "field": "spec.panels.panel-1.spec.plugin.kind",
+                  "message": "Invalid chart type 'InvalidChart'. Must be one of TimeSeriesChart, GaugeChart, StatPanel, TableView, BarChart"
+                }
+              ]
+            },
+            {
+              "allowed_namespaces": ["openshift-ai", "my-project"]
+            },
+            {
+              "query_error": "parse error at char 15: unexpected identifier 'invalid'"
+            },
+            {
+              "backend": "prometheus",
+              "retry_after_seconds": 30
+            },
+            {
+              "limit": 100,
+              "window_seconds": 60,
+              "retry_after_seconds": 60
+            },
+            {
+              "tokens_created_in_last_hour": 10,
+              "retry_after_seconds": 1800
+            },
+            {
+              "client_ip": "192.0.2.1",
+              "allowed_cidrs": ["10.0.0.0/8"]
+            },
+            {
+              "error_id": "err-abc123-20251114"
+            },
+            {
+              "retry_after_seconds": 30
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "error": {
+        "code": "INVALID_REQUEST",
+        "message": "Invalid request parameters",
+        "details": {
+          "field": "refresh_interval",
+          "error": "Value must be between 5 and 300"
+        }
+      }
+    },
+    {
+      "error": {
+        "code": "UNAUTHORIZED",
+        "message": "Authentication required. Please provide a valid OpenShift OAuth token in the Authorization header"
+      }
+    },
+    {
+      "error": {
+        "code": "FORBIDDEN",
+        "message": "User lacks required permission for this operation",
+        "details": {
+          "required_permission": "Dashboard:create",
+          "user_permissions": ["Dashboard:read"]
+        }
+      }
+    },
+    {
+      "error": {
+        "code": "NOT_FOUND",
+        "message": "Dashboard not found",
+        "details": {
+          "dashboard_id": "dashboard-xyz789"
+        }
+      }
+    },
+    {
+      "error": {
+        "code": "VERSION_CONFLICT",
+        "message": "Dashboard was modified by another user. Current version is 3, provided version is 1",
+        "details": {
+          "current_version": 3,
+          "provided_version": 1,
+          "last_updated_by": "user@example.com",
+          "last_updated_at": "2025-11-14T23:30:00Z"
+        }
+      }
+    },
+    {
+      "error": {
+        "code": "DASHBOARD_NAME_CONFLICT",
+        "message": "Dashboard with name 'Model Serving Overview' already exists in project 'openshift-ai'",
+        "details": {
+          "existing_dashboard_id": "dashboard-xyz789"
+        }
+      }
+    },
+    {
+      "error": {
+        "code": "INVALID_DASHBOARD_SCHEMA",
+        "message": "Dashboard schema validation failed",
+        "details": {
+          "validation_errors": [
+            {
+              "field": "spec.panels.panel-1.spec.plugin.kind",
+              "message": "Invalid chart type 'InvalidChart'. Must be one of TimeSeriesChart, GaugeChart, StatPanel, TableView, BarChart"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "error": {
+        "code": "NAMESPACE_FILTER_REQUIRED",
+        "message": "Metric query must include namespace filter for security",
+        "details": {
+          "allowed_namespaces": ["openshift-ai", "my-project"]
+        }
+      }
+    },
+    {
+      "error": {
+        "code": "INVALID_PROMQL",
+        "message": "Invalid PromQL query syntax",
+        "details": {
+          "query_error": "parse error at char 15: unexpected identifier 'invalid'"
+        }
+      }
+    },
+    {
+      "error": {
+        "code": "METRIC_BACKEND_UNAVAILABLE",
+        "message": "Metric backend is temporarily unavailable",
+        "details": {
+          "backend": "prometheus",
+          "retry_after_seconds": 30
+        }
+      }
+    },
+    {
+      "error": {
+        "code": "RATE_LIMIT_EXCEEDED",
+        "message": "Rate limit exceeded. Please retry after 60 seconds",
+        "details": {
+          "limit": 100,
+          "window_seconds": 60,
+          "retry_after_seconds": 60
+        }
+      }
+    },
+    {
+      "error": {
+        "code": "SHARE_TOKEN_RATE_LIMIT",
+        "message": "Maximum 10 share tokens per hour exceeded for this dashboard",
+        "details": {
+          "tokens_created_in_last_hour": 10,
+          "retry_after_seconds": 1800
+        }
+      }
+    },
+    {
+      "error": {
+        "code": "INVALID_SHARE_TOKEN",
+        "message": "Share token is invalid, expired, or has been revoked"
+      }
+    },
+    {
+      "error": {
+        "code": "IP_RESTRICTION_VIOLATION",
+        "message": "Your IP address is not authorized to access this dashboard",
+        "details": {
+          "client_ip": "192.0.2.1",
+          "allowed_cidrs": ["10.0.0.0/8"]
+        }
+      }
+    },
+    {
+      "error": {
+        "code": "INTERNAL_ERROR",
+        "message": "An unexpected error occurred. Please contact support if the issue persists",
+        "details": {
+          "error_id": "err-abc123-20251114"
+        }
+      }
+    },
+    {
+      "error": {
+        "code": "SERVICE_UNAVAILABLE",
+        "message": "Database connection pool exhausted. Please retry in 30 seconds",
+        "details": {
+          "retry_after_seconds": 30
+        }
+      }
+    }
+  ]
+}

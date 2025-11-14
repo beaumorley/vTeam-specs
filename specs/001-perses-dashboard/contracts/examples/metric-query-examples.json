@@ -1,0 +1,294 @@
+{
+  "examples": [
+    {
+      "name": "Inference Latency Query",
+      "description": "Query p95 inference latency for model serving endpoint",
+      "request": {
+        "query": "histogram_quantile(0.95, rate(model_inference_duration_seconds_bucket{namespace=\"openshift-ai\",model=\"sentiment-analysis-v2\"}[5m]))",
+        "start": "2025-11-14T22:00:00Z",
+        "end": "2025-11-14T23:00:00Z",
+        "step": "15s"
+      },
+      "response": {
+        "status": "success",
+        "data": {
+          "resultType": "matrix",
+          "result": [
+            {
+              "metric": {
+                "__name__": "model_inference_duration_seconds",
+                "namespace": "openshift-ai",
+                "model": "sentiment-analysis-v2",
+                "pod": "sentiment-analysis-abc123-xyz"
+              },
+              "values": [
+                [1731628800, "0.125"],
+                [1731628815, "0.130"],
+                [1731628830, "0.128"],
+                [1731628845, "0.132"],
+                [1731628860, "0.127"]
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "CPU Utilization by Pod",
+      "description": "Aggregate CPU usage by pod with namespace filter",
+      "request": {
+        "query": "sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=\"openshift-ai\",pod=~\"model-serving-.*\"}[5m]))",
+        "start": "2025-11-14T22:00:00Z",
+        "end": "2025-11-14T23:00:00Z",
+        "step": "30s"
+      },
+      "response": {
+        "status": "success",
+        "data": {
+          "resultType": "matrix",
+          "result": [
+            {
+              "metric": {
+                "pod": "model-serving-abc123-xyz"
+              },
+              "values": [
+                [1731628800, "0.45"],
+                [1731628830, "0.48"],
+                [1731628860, "0.52"]
+              ]
+            },
+            {
+              "metric": {
+                "pod": "model-serving-def456-uvw"
+              },
+              "values": [
+                [1731628800, "0.38"],
+                [1731628830, "0.41"],
+                [1731628860, "0.39"]
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Memory Usage Query",
+      "description": "Total memory usage across namespace",
+      "request": {
+        "query": "sum(container_memory_usage_bytes{namespace=\"openshift-ai\"}) / (1024^3)",
+        "start": "2025-11-14T22:00:00Z",
+        "end": "2025-11-14T23:00:00Z",
+        "step": "1m"
+      },
+      "response": {
+        "status": "success",
+        "data": {
+          "resultType": "matrix",
+          "result": [
+            {
+              "metric": {},
+              "values": [
+                [1731628800, "12.5"],
+                [1731628860, "12.8"],
+                [1731628920, "13.1"],
+                [1731628980, "12.9"]
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Request Rate with Status Codes",
+      "description": "HTTP request rate grouped by status code",
+      "request": {
+        "query": "sum(rate(http_requests_total{namespace=\"openshift-ai\",model=\"sentiment-analysis-v2\"}[5m])) by (status)",
+        "start": "2025-11-14T22:00:00Z",
+        "end": "2025-11-14T23:00:00Z",
+        "step": "15s"
+      },
+      "response": {
+        "status": "success",
+        "data": {
+          "resultType": "matrix",
+          "result": [
+            {
+              "metric": {
+                "status": "200"
+              },
+              "values": [
+                [1731628800, "42.5"],
+                [1731628815, "45.2"],
+                [1731628830, "43.8"]
+              ]
+            },
+            {
+              "metric": {
+                "status": "500"
+              },
+              "values": [
+                [1731628800, "0.5"],
+                [1731628815, "0.3"],
+                [1731628830, "0.4"]
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Instant Vector Query",
+      "description": "Current value of a metric (vector result)",
+      "request": {
+        "query": "up{namespace=\"openshift-ai\",job=\"model-serving\"}",
+        "start": "2025-11-14T23:00:00Z",
+        "end": "2025-11-14T23:00:00Z",
+        "step": "1s"
+      },
+      "response": {
+        "status": "success",
+        "data": {
+          "resultType": "vector",
+          "result": [
+            {
+              "metric": {
+                "__name__": "up",
+                "namespace": "openshift-ai",
+                "job": "model-serving",
+                "instance": "10.0.1.42:8080"
+              },
+              "value": [1731628800, "1"]
+            },
+            {
+              "metric": {
+                "__name__": "up",
+                "namespace": "openshift-ai",
+                "job": "model-serving",
+                "instance": "10.0.1.43:8080"
+              },
+              "value": [1731628800, "1"]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "GPU Utilization Query",
+      "description": "Average GPU utilization for training jobs",
+      "request": {
+        "query": "avg by (pod) (DCGM_FI_DEV_GPU_UTIL{namespace=\"ml-experiments\",pod=~\"training-.*\"})",
+        "start": "2025-11-14T20:00:00Z",
+        "end": "2025-11-14T23:00:00Z",
+        "step": "1m"
+      },
+      "response": {
+        "status": "success",
+        "data": {
+          "resultType": "matrix",
+          "result": [
+            {
+              "metric": {
+                "pod": "training-job-abc123"
+              },
+              "values": [
+                [1731621600, "85.2"],
+                [1731621660, "87.5"],
+                [1731621720, "86.8"],
+                [1731621780, "88.1"]
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Error Rate Calculation",
+      "description": "Calculate percentage of 5xx errors",
+      "request": {
+        "query": "100 * sum(rate(http_requests_total{namespace=\"openshift-ai\",status=~\"5..\"}[5m])) / sum(rate(http_requests_total{namespace=\"openshift-ai\"}[5m]))",
+        "start": "2025-11-14T22:00:00Z",
+        "end": "2025-11-14T23:00:00Z",
+        "step": "30s"
+      },
+      "response": {
+        "status": "success",
+        "data": {
+          "resultType": "matrix",
+          "result": [
+            {
+              "metric": {},
+              "values": [
+                [1731628800, "1.2"],
+                [1731628830, "0.8"],
+                [1731628860, "1.5"],
+                [1731628890, "0.9"]
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Invalid Query Error",
+      "description": "Example of error response for invalid PromQL",
+      "request": {
+        "query": "invalid_syntax{namespace=\"openshift-ai\" invalid",
+        "start": "2025-11-14T22:00:00Z",
+        "end": "2025-11-14T23:00:00Z",
+        "step": "15s"
+      },
+      "response": {
+        "status": "error",
+        "errorType": "bad_data",
+        "error": "parse error at char 41: unexpected identifier \"invalid\""
+      }
+    },
+    {
+      "name": "Missing Namespace Filter",
+      "description": "Query rejected due to missing namespace filter (security)",
+      "request": {
+        "query": "up{job=\"model-serving\"}",
+        "start": "2025-11-14T22:00:00Z",
+        "end": "2025-11-14T23:00:00Z",
+        "step": "15s"
+      },
+      "api_error_response": {
+        "error": {
+          "code": "NAMESPACE_FILTER_REQUIRED",
+          "message": "Metric query must include namespace filter for security",
+          "details": {
+            "allowed_namespaces": ["openshift-ai", "ml-experiments"]
+          }
+        }
+      }
+    },
+    {
+      "name": "Percentile Aggregation",
+      "description": "Multiple percentiles (p50, p95, p99) for latency analysis",
+      "request": {
+        "query": "histogram_quantile(0.95, rate(model_inference_duration_seconds_bucket{namespace=\"openshift-ai\"}[5m]))",
+        "start": "2025-11-14T22:00:00Z",
+        "end": "2025-11-14T23:00:00Z",
+        "step": "15s"
+      },
+      "response": {
+        "status": "success",
+        "data": {
+          "resultType": "matrix",
+          "result": [
+            {
+              "metric": {
+                "model": "sentiment-analysis-v2"
+              },
+              "values": [
+                [1731628800, "0.125"],
+                [1731628815, "0.130"],
+                [1731628830, "0.128"]
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

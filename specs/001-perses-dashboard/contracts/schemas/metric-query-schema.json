@@ -1,0 +1,251 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://openshift-ai.redhat.com/schemas/dashboard/v1/metric-query.json",
+  "title": "Metric Query",
+  "description": "Schema for metric query requests and responses (Prometheus/Thanos API proxy)",
+  "definitions": {
+    "MetricQueryRequest": {
+      "type": "object",
+      "description": "Request to query metrics from Prometheus/Thanos backend (FR-007, FR-011)",
+      "required": ["query", "start", "end"],
+      "properties": {
+        "query": {
+          "type": "string",
+          "description": "PromQL query string (must include namespace filter for security)",
+          "minLength": 1,
+          "maxLength": 1000,
+          "examples": [
+            "histogram_quantile(0.95, rate(model_inference_duration_seconds_bucket{namespace=\"openshift-ai\"}[5m]))",
+            "sum by (workload) (rate(container_cpu_usage_seconds_total{namespace=\"openshift-ai\"}[5m]))",
+            "avg(container_memory_usage_bytes{namespace=\"openshift-ai\"})"
+          ]
+        },
+        "start": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Query start time (ISO 8601, UTC)",
+          "examples": ["2025-11-14T22:00:00Z", "2025-11-14T00:00:00.000Z"]
+        },
+        "end": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Query end time (ISO 8601, UTC)",
+          "examples": ["2025-11-14T23:00:00Z", "2025-11-14T23:59:59.999Z"]
+        },
+        "step": {
+          "type": "string",
+          "description": "Query resolution step (duration format: Ns, Nm, Nh, Nd)",
+          "pattern": "^\\d+[smhd]$",
+          "default": "15s",
+          "examples": ["15s", "30s", "1m", "5m", "1h"]
+        }
+      },
+      "additionalProperties": false,
+      "examples": [
+        {
+          "query": "histogram_quantile(0.95, rate(model_inference_duration_seconds_bucket{namespace=\"openshift-ai\"}[5m]))",
+          "start": "2025-11-14T22:00:00Z",
+          "end": "2025-11-14T23:00:00Z",
+          "step": "15s"
+        },
+        {
+          "query": "sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=\"openshift-ai\"}[5m]))",
+          "start": "2025-11-14T00:00:00Z",
+          "end": "2025-11-14T23:59:59Z",
+          "step": "1m"
+        }
+      ]
+    },
+    "MetricQueryResponse": {
+      "type": "object",
+      "description": "Response from metric query (Prometheus API format)",
+      "required": ["status", "data"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "description": "Query execution status",
+          "enum": ["success", "error"],
+          "examples": ["success"]
+        },
+        "data": {
+          "type": "object",
+          "description": "Query result data",
+          "required": ["resultType", "result"],
+          "properties": {
+            "resultType": {
+              "type": "string",
+              "description": "Type of result returned",
+              "enum": ["matrix", "vector", "scalar"],
+              "examples": ["matrix"]
+            },
+            "result": {
+              "oneOf": [
+                {
+                  "$ref": "#/definitions/MatrixResult"
+                },
+                {
+                  "$ref": "#/definitions/VectorResult"
+                },
+                {
+                  "$ref": "#/definitions/ScalarResult"
+                }
+              ]
+            }
+          }
+        },
+        "errorType": {
+          "type": "string",
+          "description": "Error type (only present if status=error)",
+          "enum": ["timeout", "canceled", "execution", "bad_data", "internal"],
+          "examples": ["bad_data"]
+        },
+        "error": {
+          "type": "string",
+          "description": "Error message (only present if status=error)",
+          "examples": ["parse error at char 15: unexpected identifier"]
+        }
+      },
+      "additionalProperties": false,
+      "examples": [
+        {
+          "status": "success",
+          "data": {
+            "resultType": "matrix",
+            "result": [
+              {
+                "metric": {
+                  "__name__": "model_inference_duration_seconds",
+                  "namespace": "openshift-ai",
+                  "pod": "model-serving-abc123"
+                },
+                "values": [
+                  [1731628800, "0.125"],
+                  [1731628815, "0.130"],
+                  [1731628830, "0.128"]
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "MatrixResult": {
+      "type": "array",
+      "description": "Range vector result (time series over time range)",
+      "items": {
+        "$ref": "#/definitions/MatrixSeries"
+      }
+    },
+    "MatrixSeries": {
+      "type": "object",
+      "description": "Single time series in matrix result",
+      "required": ["metric", "values"],
+      "properties": {
+        "metric": {
+          "$ref": "#/definitions/MetricLabels"
+        },
+        "values": {
+          "type": "array",
+          "description": "Array of [timestamp, value] tuples",
+          "items": {
+            "$ref": "#/definitions/Sample"
+          },
+          "examples": [
+            [
+              [1731628800, "0.125"],
+              [1731628815, "0.130"],
+              [1731628830, "0.128"]
+            ]
+          ]
+        }
+      }
+    },
+    "VectorResult": {
+      "type": "array",
+      "description": "Instant vector result (single point in time)",
+      "items": {
+        "$ref": "#/definitions/VectorSample"
+      }
+    },
+    "VectorSample": {
+      "type": "object",
+      "description": "Single instant sample in vector result",
+      "required": ["metric", "value"],
+      "properties": {
+        "metric": {
+          "$ref": "#/definitions/MetricLabels"
+        },
+        "value": {
+          "$ref": "#/definitions/Sample"
+        }
+      }
+    },
+    "ScalarResult": {
+      "type": "array",
+      "description": "Scalar result (single numeric value)",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": [
+        {
+          "type": "number",
+          "description": "Unix timestamp"
+        },
+        {
+          "type": "string",
+          "description": "Numeric value as string"
+        }
+      ],
+      "examples": [[1731628800, "42.5"]]
+    },
+    "MetricLabels": {
+      "type": "object",
+      "description": "Metric label set (key-value pairs)",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "examples": [
+        {
+          "__name__": "model_inference_duration_seconds",
+          "namespace": "openshift-ai",
+          "pod": "model-serving-abc123",
+          "workload": "sentiment-analysis-v2"
+        },
+        {
+          "__name__": "container_cpu_usage_seconds_total",
+          "namespace": "openshift-ai",
+          "container": "inference-server",
+          "pod": "model-serving-abc123"
+        }
+      ]
+    },
+    "Sample": {
+      "type": "array",
+      "description": "Single metric sample: [timestamp, value]",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": [
+        {
+          "type": "number",
+          "description": "Unix timestamp (seconds since epoch)"
+        },
+        {
+          "type": "string",
+          "description": "Metric value as string (to preserve precision)"
+        }
+      ],
+      "examples": [
+        [1731628800, "0.125"],
+        [1731628815, "42.5"],
+        [1731628830, "0"]
+      ]
+    }
+  },
+  "oneOf": [
+    {
+      "$ref": "#/definitions/MetricQueryRequest"
+    },
+    {
+      "$ref": "#/definitions/MetricQueryResponse"
+    }
+  ]
+}

@@ -1,0 +1,2083 @@
+openapi: 3.0.3
+info:
+  title: Perses Observability Dashboard API
+  description: |
+    REST API for OpenShift AI Observability Dashboard powered by Perses.
+
+    **Features**:
+    - Dashboard CRUD operations with RBAC enforcement
+    - Dashboard template management and instantiation
+    - Share token generation for ephemeral read-only access
+    - Metrics query proxy to Prometheus/Thanos
+    - User preferences management
+    - Audit logging and access tracking
+
+    **Authentication**: OpenShift OAuth bearer tokens in Authorization header
+
+    **Versioning**: URL path versioning (/api/v1/)
+
+    **Rate Limiting**: 100 requests/minute per user (X-RateLimit-* headers)
+  version: 1.0.0
+  contact:
+    name: OpenShift AI Platform Team
+    email: openshift-ai-dev@redhat.com
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0.html
+
+servers:
+  - url: https://dashboard.openshift-ai.svc.cluster.local/api/v1
+    description: Production API
+  - url: http://localhost:8080/api/v1
+    description: Local development
+
+tags:
+  - name: dashboards
+    description: Dashboard CRUD operations
+  - name: templates
+    description: Dashboard template management
+  - name: sharing
+    description: Share token management
+  - name: metrics
+    description: Metrics query proxy
+  - name: preferences
+    description: User preferences
+  - name: audit
+    description: Audit log queries
+
+security:
+  - OpenShiftOAuth: []
+
+paths:
+  # ============================================================================
+  # DASHBOARDS - P0 Endpoints for Pact Contract Testing
+  # ============================================================================
+
+  /projects/{project}/dashboards:
+    get:
+      tags:
+        - dashboards
+      summary: List dashboards in project
+      description: |
+        Retrieve all dashboards accessible in the specified project/namespace.
+
+        **RBAC**: Requires `Dashboard:list` permission in project
+
+        **Performance**: Indexed query, <100ms p95 latency
+
+        **Pagination**: Use `limit` and `offset` for large result sets
+      operationId: listDashboards
+      parameters:
+        - $ref: '#/components/parameters/ProjectPath'
+        - name: state
+          in: query
+          description: Filter by dashboard state
+          required: false
+          schema:
+            type: string
+            enum: [draft, active, archived]
+            default: active
+        - name: template_id
+          in: query
+          description: Filter by template ID (dashboards created from template)
+          required: false
+          schema:
+            type: string
+            example: template-model-serving
+        - name: limit
+          in: query
+          description: Maximum number of results to return
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: offset
+          in: query
+          description: Number of results to skip (for pagination)
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: sort
+          in: query
+          description: Sort field and order
+          required: false
+          schema:
+            type: string
+            enum: [name_asc, name_desc, created_at_asc, created_at_desc, updated_at_asc, updated_at_desc]
+            default: updated_at_desc
+      responses:
+        '200':
+          description: Successful response with dashboard list
+          headers:
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/X-RateLimit-Limit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/X-RateLimit-Remaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/X-RateLimit-Reset'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  dashboards:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Dashboard'
+                  pagination:
+                    $ref: '#/components/schemas/PaginationMetadata'
+              examples:
+                modelServingDashboards:
+                  $ref: '#/components/examples/DashboardListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+    post:
+      tags:
+        - dashboards
+      summary: Create new dashboard
+      description: |
+        Create a new custom dashboard in the specified project.
+
+        **RBAC**: Requires `Dashboard:create` permission in project (FR-005)
+
+        **Validation**:
+        - Dashboard name must be unique within project
+        - Doc must conform to Perses Dashboard schema
+        - All metric queries must include namespace filter (security)
+
+        **Audit**: Logged as `dashboard.create` action
+      operationId: createDashboard
+      parameters:
+        - $ref: '#/components/parameters/ProjectPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DashboardCreateRequest'
+            examples:
+              modelServingDashboard:
+                $ref: '#/components/examples/CreateModelServingDashboard'
+      responses:
+        '201':
+          description: Dashboard created successfully
+          headers:
+            Location:
+              description: URL of the created dashboard
+              schema:
+                type: string
+                example: /api/v1/projects/openshift-ai/dashboards/dashboard-abc123
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Dashboard'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Conflict - Dashboard name already exists in project
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error:
+                  code: DASHBOARD_NAME_CONFLICT
+                  message: Dashboard with name 'Model Serving Overview' already exists in project 'openshift-ai'
+                  details:
+                    existing_dashboard_id: dashboard-xyz789
+        '422':
+          description: Unprocessable Entity - Invalid dashboard schema
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error:
+                  code: INVALID_DASHBOARD_SCHEMA
+                  message: Dashboard schema validation failed
+                  details:
+                    validation_errors:
+                      - field: spec.panels.panel-1.spec.plugin.kind
+                        message: Invalid chart type 'InvalidChart'. Must be one of TimeSeriesChart, GaugeChart, StatPanel, TableView, BarChart
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /projects/{project}/dashboards/{id}:
+    get:
+      tags:
+        - dashboards
+      summary: Get dashboard by ID
+      description: |
+        Retrieve a specific dashboard's configuration and metadata.
+
+        **RBAC**: Requires `Dashboard:read` permission in project
+
+        **Cache**: Response cached for 30 seconds (ETags supported)
+
+        **Audit**: Logged as `dashboard.read` action
+      operationId: getDashboard
+      parameters:
+        - $ref: '#/components/parameters/ProjectPath'
+        - $ref: '#/components/parameters/DashboardIdPath'
+        - name: If-None-Match
+          in: header
+          description: ETag for conditional GET (cache validation)
+          required: false
+          schema:
+            type: string
+            example: '"abc123-v5"'
+      responses:
+        '200':
+          description: Successful response with dashboard details
+          headers:
+            ETag:
+              description: Entity tag for caching
+              schema:
+                type: string
+                example: '"dashboard-abc123-v1"'
+            Cache-Control:
+              description: Cache control directives
+              schema:
+                type: string
+                example: private, max-age=30
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Dashboard'
+              examples:
+                modelServingDashboard:
+                  $ref: '#/components/examples/ModelServingDashboard'
+        '304':
+          description: Not Modified - Cached version is still valid
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    put:
+      tags:
+        - dashboards
+      summary: Update dashboard
+      description: |
+        Update an existing dashboard's configuration.
+
+        **RBAC**: Requires `Dashboard:update` permission in project
+
+        **Optimistic Locking**: Use version field to prevent concurrent modification conflicts
+
+        **Audit**: Logged as `dashboard.update` action with changed fields in metadata
+      operationId: updateDashboard
+      parameters:
+        - $ref: '#/components/parameters/ProjectPath'
+        - $ref: '#/components/parameters/DashboardIdPath'
+        - name: If-Match
+          in: header
+          description: ETag for optimistic locking
+          required: false
+          schema:
+            type: string
+            example: '"dashboard-abc123-v1"'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DashboardUpdateRequest'
+            examples:
+              updateRefreshInterval:
+                summary: Update refresh interval only
+                value:
+                  refresh_interval: 30
+                  version: 1
+              updatePanels:
+                summary: Add new chart panel
+                value:
+                  doc:
+                    spec:
+                      panels:
+                        panel-3:
+                          kind: Panel
+                          spec:
+                            display:
+                              name: Memory Usage
+                            plugin:
+                              kind: TimeSeriesChart
+                              spec:
+                                queries:
+                                  - kind: PrometheusTimeSeriesQuery
+                                    spec:
+                                      query: sum(container_memory_usage_bytes{namespace="openshift-ai"})
+                  version: 1
+      responses:
+        '200':
+          description: Dashboard updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Dashboard'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Conflict - Version mismatch (concurrent modification)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error:
+                  code: VERSION_CONFLICT
+                  message: Dashboard was modified by another user. Current version is 3, provided version is 1
+                  details:
+                    current_version: 3
+                    provided_version: 1
+                    last_updated_by: user@example.com
+                    last_updated_at: "2025-11-14T23:30:00Z"
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    delete:
+      tags:
+        - dashboards
+      summary: Delete dashboard
+      description: |
+        Delete a dashboard (moves to archived state, soft delete).
+
+        **RBAC**: Requires `Dashboard:delete` permission in project
+
+        **Cascade**: Share tokens for this dashboard are revoked but audit logs retained
+
+        **Audit**: Logged as `dashboard.delete` action
+      operationId: deleteDashboard
+      parameters:
+        - $ref: '#/components/parameters/ProjectPath'
+        - $ref: '#/components/parameters/DashboardIdPath'
+      responses:
+        '204':
+          description: Dashboard deleted successfully (no content)
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /projects/{project}/dashboards/{id}/export:
+    get:
+      tags:
+        - dashboards
+      summary: Export dashboard configuration
+      description: |
+        Export dashboard configuration as JSON for backup or version control (FR-012).
+
+        **RBAC**: Requires `Dashboard:read` permission in project
+
+        **Format**: Returns standalone Perses Dashboard JSON (can be imported/versioned)
+
+        **Audit**: Logged as `dashboard.export` action
+      operationId: exportDashboard
+      parameters:
+        - $ref: '#/components/parameters/ProjectPath'
+        - $ref: '#/components/parameters/DashboardIdPath'
+      responses:
+        '200':
+          description: Dashboard configuration exported successfully
+          headers:
+            Content-Disposition:
+              description: Suggested filename for download
+              schema:
+                type: string
+                example: attachment; filename="model-serving-overview.json"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersesDefinition'
+              examples:
+                exportedDashboard:
+                  $ref: '#/components/examples/ExportedDashboard'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  # ============================================================================
+  # SHARING - P0 Endpoint for Pact Contract Testing
+  # ============================================================================
+
+  /projects/{project}/dashboards/{id}/share:
+    post:
+      tags:
+        - sharing
+      summary: Generate share token
+      description: |
+        Generate an ephemeral read-only share token for anonymous dashboard access (FR-020).
+
+        **RBAC**: Requires `Dashboard:share` permission (admin-gated for security SC-010)
+
+        **Security**:
+        - UUID v4 tokens (non-sequential, prevents enumeration)
+        - Default TTL: 24 hours, max TTL: 7 days
+        - Optional IP restrictions via CIDR whitelist
+        - Rate limited: 10 tokens/hour per dashboard
+
+        **Audit**: Logged as `dashboard.share` action with token TTL and IP restrictions
+      operationId: createShareToken
+      parameters:
+        - $ref: '#/components/parameters/ProjectPath'
+        - $ref: '#/components/parameters/DashboardIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ShareTokenCreateRequest'
+            examples:
+              default24Hour:
+                summary: Default 24-hour token
+                value:
+                  expires_in: 86400
+              weekLongToken:
+                summary: 7-day token with IP restrictions
+                value:
+                  expires_in: 604800
+                  ip_restrictions:
+                    - 10.0.0.0/8
+                    - 203.0.113.0/24
+      responses:
+        '201':
+          description: Share token created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShareToken'
+              examples:
+                createdToken:
+                  $ref: '#/components/examples/ShareTokenResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          description: Rate limit exceeded - Too many share tokens created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error:
+                  code: SHARE_TOKEN_RATE_LIMIT
+                  message: Maximum 10 share tokens per hour exceeded for this dashboard
+                  details:
+                    tokens_created_in_last_hour: 10
+                    retry_after_seconds: 1800
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /projects/{project}/dashboards/{id}/share/{token_id}:
+    delete:
+      tags:
+        - sharing
+      summary: Revoke share token
+      description: |
+        Revoke an active share token, immediately invalidating access.
+
+        **RBAC**: Requires `Dashboard:share` permission or must be token creator
+
+        **Audit**: Logged as `dashboard.share.revoke` action
+      operationId: revokeShareToken
+      parameters:
+        - $ref: '#/components/parameters/ProjectPath'
+        - $ref: '#/components/parameters/DashboardIdPath'
+        - name: token_id
+          in: path
+          description: Share token UUID
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Share token revoked successfully
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /shared/{token}:
+    get:
+      tags:
+        - sharing
+      summary: Access dashboard via share token
+      description: |
+        Access a dashboard using a share token (anonymous, no authentication required).
+
+        **Security**:
+        - Token validation: Not expired, not revoked
+        - IP restrictions enforced if configured
+        - Rate limited: 100 validations/min per IP (prevent brute-force)
+
+        **Audit**: Logged as `dashboard.access.token` action with client IP and token ID
+      operationId: getSharedDashboard
+      security: []  # No authentication required
+      parameters:
+        - name: token
+          in: path
+          description: Share token UUID
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Dashboard accessed successfully via share token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Dashboard'
+              examples:
+                sharedDashboard:
+                  $ref: '#/components/examples/ModelServingDashboard'
+        '401':
+          description: Unauthorized - Invalid or expired token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error:
+                  code: INVALID_SHARE_TOKEN
+                  message: Share token is invalid, expired, or has been revoked
+        '403':
+          description: Forbidden - IP address not whitelisted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error:
+                  code: IP_RESTRICTION_VIOLATION
+                  message: Your IP address is not authorized to access this dashboard
+                  details:
+                    client_ip: 192.0.2.1
+                    allowed_cidrs:
+                      - 10.0.0.0/8
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  # ============================================================================
+  # TEMPLATES
+  # ============================================================================
+
+  /templates:
+    get:
+      tags:
+        - templates
+      summary: List dashboard templates
+      description: |
+        List available dashboard templates (system and user-created).
+
+        **RBAC**: Public access (no auth required for listing)
+
+        **Templates**: Model serving, training job, notebook, data pipeline (FR-003)
+      operationId: listTemplates
+      parameters:
+        - name: category
+          in: query
+          description: Filter by template category
+          required: false
+          schema:
+            type: string
+            enum: [model_serving, training_job, notebook, data_pipeline, custom]
+        - name: is_system
+          in: query
+          description: Filter system vs user-created templates
+          required: false
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Successful response with template list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  templates:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DashboardTemplate'
+              examples:
+                systemTemplates:
+                  $ref: '#/components/examples/TemplateListResponse'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /templates/{id}:
+    get:
+      tags:
+        - templates
+      summary: Get template by ID
+      description: Retrieve a specific template's configuration
+      operationId: getTemplate
+      parameters:
+        - name: id
+          in: path
+          description: Template identifier
+          required: true
+          schema:
+            type: string
+            example: template-model-serving
+      responses:
+        '200':
+          description: Successful response with template details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardTemplate'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /projects/{project}/dashboards/from-template:
+    post:
+      tags:
+        - templates
+      summary: Instantiate dashboard from template
+      description: |
+        Create a new dashboard by instantiating a template with variable substitution.
+
+        **RBAC**: Requires `Dashboard:create` permission in project
+
+        **Variables**: Namespace, workload name, custom labels
+
+        **Audit**: Logged as `template.instantiate` action
+      operationId: instantiateTemplate
+      parameters:
+        - $ref: '#/components/parameters/ProjectPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TemplateInstantiateRequest'
+            examples:
+              modelServingFromTemplate:
+                $ref: '#/components/examples/InstantiateTemplateRequest'
+      responses:
+        '201':
+          description: Dashboard created from template successfully
+          headers:
+            Location:
+              description: URL of the created dashboard
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Dashboard'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: Template not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  # ============================================================================
+  # METRICS - P0 Endpoint for Pact Contract Testing
+  # ============================================================================
+
+  /metrics/query:
+    post:
+      tags:
+        - metrics
+      summary: Query metrics from Prometheus/Thanos
+      description: |
+        Proxy metric queries to backend TSDB with security enforcement.
+
+        **RBAC**: Namespace filter automatically injected based on user permissions
+
+        **Query Validation**: PromQL syntax validation, namespace filter enforcement (FR-007)
+
+        **Performance**: Cached for 15s based on query hash and time range
+
+        **Rate Limiting**: 60 queries/minute per user
+      operationId: queryMetrics
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MetricQueryRequest'
+            examples:
+              inferenceLatency:
+                $ref: '#/components/examples/MetricQueryRequest'
+      responses:
+        '200':
+          description: Successful metric query response
+          headers:
+            X-Query-Cache-Hit:
+              description: Whether response was served from cache
+              schema:
+                type: boolean
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetricQueryResponse'
+              examples:
+                timeSeriesResult:
+                  $ref: '#/components/examples/MetricQueryResponse'
+        '400':
+          description: Bad Request - Invalid PromQL query
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error:
+                  code: INVALID_PROMQL
+                  message: Invalid PromQL query syntax
+                  details:
+                    query_error: "parse error at char 15: unexpected identifier 'invalid'"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: Forbidden - Namespace filter missing or unauthorized namespace
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error:
+                  code: NAMESPACE_FILTER_REQUIRED
+                  message: Metric query must include namespace filter for security
+                  details:
+                    allowed_namespaces:
+                      - openshift-ai
+                      - my-project
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        '503':
+          description: Service Unavailable - Prometheus/Thanos backend unreachable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error:
+                  code: METRIC_BACKEND_UNAVAILABLE
+                  message: Metric backend is temporarily unavailable
+                  details:
+                    backend: prometheus
+                    retry_after_seconds: 30
+
+  # ============================================================================
+  # USER PREFERENCES
+  # ============================================================================
+
+  /preferences:
+    get:
+      tags:
+        - preferences
+      summary: Get user preferences
+      description: Retrieve current user's dashboard preferences
+      operationId: getUserPreferences
+      responses:
+        '200':
+          description: Successful response with user preferences
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserPreferences'
+              examples:
+                userPrefs:
+                  $ref: '#/components/examples/UserPreferences'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    put:
+      tags:
+        - preferences
+      summary: Update user preferences
+      description: Update current user's dashboard preferences
+      operationId: updateUserPreferences
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserPreferencesUpdateRequest'
+            examples:
+              updateTimezone:
+                summary: Update timezone preference
+                value:
+                  timezone: America/New_York
+                  default_time_range: last_24h
+      responses:
+        '200':
+          description: Preferences updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserPreferences'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  # ============================================================================
+  # AUDIT LOGS
+  # ============================================================================
+
+  /audit/logs:
+    get:
+      tags:
+        - audit
+      summary: Query audit logs
+      description: |
+        Retrieve audit log entries for compliance and security analysis.
+
+        **RBAC**: Requires `AuditLog:read` permission (admin-only)
+
+        **Compliance**: SOC2, ISO 27001, HIPAA
+
+        **Retention**: 90 days default, configurable per compliance requirements
+      operationId: queryAuditLogs
+      parameters:
+        - name: user_id
+          in: query
+          description: Filter by user ID
+          required: false
+          schema:
+            type: string
+        - name: action
+          in: query
+          description: Filter by action type
+          required: false
+          schema:
+            type: string
+            enum:
+              - dashboard.create
+              - dashboard.read
+              - dashboard.update
+              - dashboard.delete
+              - dashboard.export
+              - dashboard.share
+              - dashboard.share.revoke
+              - dashboard.access.token
+        - name: resource_id
+          in: query
+          description: Filter by resource ID
+          required: false
+          schema:
+            type: string
+        - name: start_time
+          in: query
+          description: Start of time range (ISO 8601)
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: end_time
+          in: query
+          description: End of time range (ISO 8601)
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: limit
+          in: query
+          description: Maximum number of results
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 100
+        - name: offset
+          in: query
+          description: Number of results to skip
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: Successful response with audit log entries
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  logs:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AuditLogEntry'
+                  pagination:
+                    $ref: '#/components/schemas/PaginationMetadata'
+              examples:
+                auditLogs:
+                  $ref: '#/components/examples/AuditLogResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+# ==============================================================================
+# COMPONENTS
+# ==============================================================================
+
+components:
+  securitySchemes:
+    OpenShiftOAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: OpenShift OAuth bearer token obtained via OAuth flow
+
+  parameters:
+    ProjectPath:
+      name: project
+      in: path
+      description: Project/namespace identifier
+      required: true
+      schema:
+        type: string
+        pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'
+        example: openshift-ai
+
+    DashboardIdPath:
+      name: id
+      in: path
+      description: Dashboard identifier (UUID format)
+      required: true
+      schema:
+        type: string
+        pattern: '^dashboard-[a-z0-9]{6,}$'
+        example: dashboard-abc123
+
+  headers:
+    X-RateLimit-Limit:
+      description: Maximum number of requests allowed per window
+      schema:
+        type: integer
+        example: 100
+
+    X-RateLimit-Remaining:
+      description: Number of requests remaining in current window
+      schema:
+        type: integer
+        example: 95
+
+    X-RateLimit-Reset:
+      description: Unix timestamp when rate limit window resets
+      schema:
+        type: integer
+        example: 1731628800
+
+  responses:
+    BadRequest:
+      description: Bad Request - Invalid request parameters or body
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: INVALID_REQUEST
+              message: Invalid request parameters
+              details:
+                field: refresh_interval
+                error: Value must be between 5 and 300
+
+    Unauthorized:
+      description: Unauthorized - Authentication required or token invalid
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: UNAUTHORIZED
+              message: Authentication required. Please provide a valid OpenShift OAuth token in the Authorization header
+
+    Forbidden:
+      description: Forbidden - User lacks required permissions
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: FORBIDDEN
+              message: User lacks required permission for this operation
+              details:
+                required_permission: Dashboard:create
+                user_permissions:
+                  - Dashboard:read
+
+    NotFound:
+      description: Not Found - Resource does not exist
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: NOT_FOUND
+              message: Dashboard not found
+              details:
+                dashboard_id: dashboard-xyz789
+
+    UnprocessableEntity:
+      description: Unprocessable Entity - Request valid but business logic validation failed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    RateLimitExceeded:
+      description: Too Many Requests - Rate limit exceeded
+      headers:
+        X-RateLimit-Limit:
+          $ref: '#/components/headers/X-RateLimit-Limit'
+        X-RateLimit-Remaining:
+          schema:
+            type: integer
+            example: 0
+        X-RateLimit-Reset:
+          $ref: '#/components/headers/X-RateLimit-Reset'
+        Retry-After:
+          description: Seconds until rate limit resets
+          schema:
+            type: integer
+            example: 60
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: RATE_LIMIT_EXCEEDED
+              message: Rate limit exceeded. Please retry after 60 seconds
+              details:
+                limit: 100
+                window_seconds: 60
+                retry_after_seconds: 60
+
+    InternalServerError:
+      description: Internal Server Error - Unexpected server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: INTERNAL_ERROR
+              message: An unexpected error occurred. Please contact support if the issue persists
+              details:
+                error_id: err-abc123-20251114
+
+    ServiceUnavailable:
+      description: Service Unavailable - Service temporarily unavailable
+      headers:
+        Retry-After:
+          description: Seconds until service is expected to be available
+          schema:
+            type: integer
+            example: 30
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: SERVICE_UNAVAILABLE
+              message: Database connection pool exhausted. Please retry in 30 seconds
+              details:
+                retry_after_seconds: 30
+
+  schemas:
+    Dashboard:
+      type: object
+      description: Dashboard entity with Perses configuration
+      required:
+        - id
+        - name
+        - project
+        - doc
+        - created_at
+        - created_by
+        - updated_at
+        - updated_by
+        - version
+        - state
+      properties:
+        id:
+          type: string
+          description: Dashboard unique identifier
+          example: dashboard-abc123
+        name:
+          type: string
+          description: Human-readable dashboard name
+          minLength: 1
+          maxLength: 128
+          example: Model Serving Overview
+        project:
+          type: string
+          description: Project/namespace identifier
+          example: openshift-ai
+        doc:
+          $ref: '#/components/schemas/PersesDefinition'
+        created_at:
+          type: string
+          format: date-time
+          description: Creation timestamp (UTC)
+          example: "2025-11-14T22:00:00Z"
+        created_by:
+          type: string
+          description: User who created the dashboard
+          example: stella@redhat.com
+        updated_at:
+          type: string
+          format: date-time
+          description: Last modification timestamp (UTC)
+          example: "2025-11-14T23:00:00Z"
+        updated_by:
+          type: string
+          description: User who last modified the dashboard
+          example: stella@redhat.com
+        version:
+          type: integer
+          description: Version number for optimistic locking
+          minimum: 1
+          example: 1
+        state:
+          type: string
+          description: Dashboard lifecycle state
+          enum: [draft, active, archived]
+          example: active
+        template_id:
+          type: string
+          description: Template ID if created from template
+          nullable: true
+          example: template-model-serving
+        refresh_interval:
+          type: integer
+          description: Metric refresh interval in seconds
+          minimum: 5
+          maximum: 300
+          default: 15
+          example: 15
+        time_range_default:
+          type: string
+          description: Default time range for dashboard
+          enum: [last_5m, last_15m, last_1h, last_6h, last_24h, last_7d, last_30d]
+          default: last_1h
+          example: last_1h
+
+    PersesDefinition:
+      type: object
+      description: Perses Dashboard JSON definition (see Perses schema)
+      additionalProperties: true
+      example:
+        kind: Dashboard
+        metadata:
+          name: model-serving-overview
+          project: openshift-ai
+        spec:
+          display:
+            name: Model Serving Overview
+          datasources:
+            prometheus:
+              kind: PrometheusDatasource
+              spec:
+                directUrl: https://thanos-querier.openshift-monitoring.svc:9091
+          panels:
+            panel-1:
+              kind: Panel
+              spec:
+                display:
+                  name: Inference Latency (p95)
+                plugin:
+                  kind: TimeSeriesChart
+                  spec:
+                    queries:
+                      - kind: PrometheusTimeSeriesQuery
+                        spec:
+                          query: histogram_quantile(0.95, rate(model_inference_duration_seconds_bucket{namespace="openshift-ai"}[5m]))
+          layouts:
+            - kind: Grid
+              spec:
+                items:
+                  - x: 0
+                    y: 0
+                    width: 12
+                    height: 6
+                    content:
+                      $ref: "#/spec/panels/panel-1"
+
+    DashboardCreateRequest:
+      type: object
+      required:
+        - name
+        - doc
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+          example: Model Serving Overview
+        doc:
+          $ref: '#/components/schemas/PersesDefinition'
+        template_id:
+          type: string
+          nullable: true
+          example: template-model-serving
+        refresh_interval:
+          type: integer
+          minimum: 5
+          maximum: 300
+          default: 15
+        time_range_default:
+          type: string
+          enum: [last_5m, last_15m, last_1h, last_6h, last_24h, last_7d, last_30d]
+          default: last_1h
+
+    DashboardUpdateRequest:
+      type: object
+      required:
+        - version
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        doc:
+          $ref: '#/components/schemas/PersesDefinition'
+        refresh_interval:
+          type: integer
+          minimum: 5
+          maximum: 300
+        time_range_default:
+          type: string
+          enum: [last_5m, last_15m, last_1h, last_6h, last_24h, last_7d, last_30d]
+        state:
+          type: string
+          enum: [draft, active, archived]
+        version:
+          type: integer
+          description: Current version for optimistic locking
+          minimum: 1
+
+    DashboardTemplate:
+      type: object
+      required:
+        - id
+        - name
+        - description
+        - category
+        - doc
+        - version
+        - is_system
+      properties:
+        id:
+          type: string
+          example: template-model-serving
+        name:
+          type: string
+          example: Model Serving Dashboard
+        description:
+          type: string
+          example: Real-time metrics for deployed model serving endpoints
+        category:
+          type: string
+          enum: [model_serving, training_job, notebook, data_pipeline, custom]
+          example: model_serving
+        doc:
+          $ref: '#/components/schemas/PersesDefinition'
+        variables:
+          type: object
+          description: Template variables for instantiation
+          additionalProperties:
+            type: object
+            properties:
+              type:
+                type: string
+                enum: [string, integer, boolean]
+              required:
+                type: boolean
+              default:
+                type: string
+          example:
+            namespace:
+              type: string
+              required: true
+            model_name:
+              type: string
+              required: true
+        version:
+          type: string
+          description: Template version (semver)
+          pattern: '^\d+\.\d+\.\d+$'
+          example: 1.0.0
+        is_system:
+          type: boolean
+          description: System-provided template (cannot be deleted)
+          example: true
+        usage_count:
+          type: integer
+          description: Number of dashboards created from template
+          minimum: 0
+          example: 42
+
+    TemplateInstantiateRequest:
+      type: object
+      required:
+        - template_id
+        - dashboard_name
+        - variables
+      properties:
+        template_id:
+          type: string
+          example: template-model-serving
+        dashboard_name:
+          type: string
+          minLength: 1
+          maxLength: 128
+          example: My Model Serving Dashboard
+        variables:
+          type: object
+          description: Variable values for template substitution
+          additionalProperties:
+            type: string
+          example:
+            namespace: openshift-ai
+            model_name: sentiment-analysis-v2
+
+    ShareToken:
+      type: object
+      required:
+        - token_id
+        - dashboard_id
+        - created_by
+        - created_at
+        - expires_at
+        - permissions
+        - revoked
+      properties:
+        token_id:
+          type: string
+          format: uuid
+          description: Share token UUID
+          example: 550e8400-e29b-41d4-a716-446655440000
+        dashboard_id:
+          type: string
+          example: dashboard-abc123
+        share_url:
+          type: string
+          format: uri
+          description: Complete share URL for easy copying
+          example: https://dashboard.openshift-ai.svc/shared/550e8400-e29b-41d4-a716-446655440000
+        created_by:
+          type: string
+          example: stella@redhat.com
+        created_at:
+          type: string
+          format: date-time
+          example: "2025-11-14T23:00:00Z"
+        expires_at:
+          type: string
+          format: date-time
+          example: "2025-11-15T23:00:00Z"
+        permissions:
+          type: array
+          items:
+            type: string
+            enum: [read]
+          example: [read]
+        ip_restrictions:
+          type: array
+          items:
+            type: string
+            format: cidr
+          nullable: true
+          example:
+            - 10.0.0.0/8
+        revoked:
+          type: boolean
+          example: false
+        usage_count:
+          type: integer
+          description: Number of times token has been used
+          example: 5
+        last_used_at:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2025-11-14T23:30:00Z"
+
+    ShareTokenCreateRequest:
+      type: object
+      required:
+        - expires_in
+      properties:
+        expires_in:
+          type: integer
+          description: Token lifetime in seconds (max 604800 = 7 days)
+          minimum: 60
+          maximum: 604800
+          example: 86400
+        ip_restrictions:
+          type: array
+          items:
+            type: string
+            format: cidr
+          nullable: true
+          example:
+            - 10.0.0.0/8
+            - 203.0.113.0/24
+
+    MetricQueryRequest:
+      type: object
+      required:
+        - query
+        - start
+        - end
+      properties:
+        query:
+          type: string
+          description: PromQL query string
+          maxLength: 1000
+          example: histogram_quantile(0.95, rate(model_inference_duration_seconds_bucket{namespace="openshift-ai"}[5m]))
+        start:
+          type: string
+          format: date-time
+          description: Query start time (ISO 8601)
+          example: "2025-11-14T22:00:00Z"
+        end:
+          type: string
+          format: date-time
+          description: Query end time (ISO 8601)
+          example: "2025-11-14T23:00:00Z"
+        step:
+          type: string
+          description: Query resolution step (duration format)
+          pattern: '^\d+[smhd]$'
+          default: 15s
+          example: 15s
+
+    MetricQueryResponse:
+      type: object
+      required:
+        - status
+        - data
+      properties:
+        status:
+          type: string
+          enum: [success, error]
+          example: success
+        data:
+          type: object
+          properties:
+            resultType:
+              type: string
+              enum: [matrix, vector, scalar]
+              example: matrix
+            result:
+              type: array
+              items:
+                type: object
+                properties:
+                  metric:
+                    type: object
+                    additionalProperties:
+                      type: string
+                    example:
+                      __name__: model_inference_duration_seconds
+                      namespace: openshift-ai
+                      pod: model-serving-abc123
+                  values:
+                    type: array
+                    items:
+                      type: array
+                      minItems: 2
+                      maxItems: 2
+                      items:
+                        oneOf:
+                          - type: number
+                          - type: string
+                    example:
+                      - [1731628800, "0.125"]
+                      - [1731628815, "0.130"]
+
+    UserPreferences:
+      type: object
+      required:
+        - user_id
+        - default_time_range
+        - default_refresh_interval
+        - timezone
+        - theme
+      properties:
+        user_id:
+          type: string
+          example: stella@redhat.com
+        default_time_range:
+          type: string
+          enum: [last_5m, last_15m, last_1h, last_6h, last_24h, last_7d, last_30d]
+          default: last_1h
+          example: last_1h
+        default_refresh_interval:
+          type: integer
+          minimum: 5
+          maximum: 300
+          default: 15
+          example: 15
+        timezone:
+          type: string
+          description: IANA timezone identifier
+          example: America/New_York
+        favorite_dashboards:
+          type: array
+          items:
+            type: string
+          maxItems: 50
+          example:
+            - dashboard-abc123
+            - dashboard-def456
+        recent_dashboards:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              viewed_at:
+                type: string
+                format: date-time
+          maxItems: 10
+          example:
+            - id: dashboard-abc123
+              viewed_at: "2025-11-14T23:00:00Z"
+        theme:
+          type: string
+          enum: [light, dark, auto]
+          default: light
+          example: light
+
+    UserPreferencesUpdateRequest:
+      type: object
+      properties:
+        default_time_range:
+          type: string
+          enum: [last_5m, last_15m, last_1h, last_6h, last_24h, last_7d, last_30d]
+        default_refresh_interval:
+          type: integer
+          minimum: 5
+          maximum: 300
+        timezone:
+          type: string
+        theme:
+          type: string
+          enum: [light, dark, auto]
+
+    AuditLogEntry:
+      type: object
+      required:
+        - id
+        - timestamp
+        - user_id
+        - action
+        - resource_type
+        - resource_id
+        - project_id
+        - result
+        - client_ip
+        - access_method
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 12345
+        timestamp:
+          type: string
+          format: date-time
+          example: "2025-11-14T23:00:00.123Z"
+        user_id:
+          type: string
+          example: stella@redhat.com
+        action:
+          type: string
+          enum:
+            - dashboard.create
+            - dashboard.read
+            - dashboard.update
+            - dashboard.delete
+            - dashboard.export
+            - dashboard.share
+            - dashboard.share.revoke
+            - dashboard.access.token
+          example: dashboard.share
+        resource_type:
+          type: string
+          enum: [Dashboard, DashboardTemplate, ShareToken]
+          example: Dashboard
+        resource_id:
+          type: string
+          example: dashboard-abc123
+        project_id:
+          type: string
+          example: openshift-ai
+        result:
+          type: string
+          enum: [success, denied, error]
+          example: success
+        client_ip:
+          type: string
+          format: ipv4
+          example: 10.0.1.42
+        user_agent:
+          type: string
+          nullable: true
+          example: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)
+        access_method:
+          type: string
+          enum: [rbac, share_token]
+          example: rbac
+        token_id:
+          type: string
+          format: uuid
+          nullable: true
+        metadata:
+          type: object
+          additionalProperties: true
+          nullable: true
+          example:
+            token_ttl: 24h
+            ip_restrictions:
+              - 10.0.0.0/8
+
+    PaginationMetadata:
+      type: object
+      required:
+        - total
+        - limit
+        - offset
+      properties:
+        total:
+          type: integer
+          description: Total number of items matching query
+          example: 157
+        limit:
+          type: integer
+          description: Maximum items per page
+          example: 20
+        offset:
+          type: integer
+          description: Number of items skipped
+          example: 0
+        next_offset:
+          type: integer
+          nullable: true
+          description: Offset for next page (null if last page)
+          example: 20
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          required:
+            - code
+            - message
+          properties:
+            code:
+              type: string
+              description: Machine-readable error code
+              example: INVALID_REQUEST
+            message:
+              type: string
+              description: Human-readable error message
+              example: Invalid request parameters
+            details:
+              type: object
+              description: Additional error context
+              additionalProperties: true
+              nullable: true
+
+  examples:
+    DashboardListResponse:
+      summary: List of dashboards in project
+      value:
+        dashboards:
+          - id: dashboard-abc123
+            name: Model Serving Overview
+            project: openshift-ai
+            created_at: "2025-11-14T22:00:00Z"
+            created_by: stella@redhat.com
+            updated_at: "2025-11-14T23:00:00Z"
+            updated_by: stella@redhat.com
+            version: 1
+            state: active
+            template_id: template-model-serving
+            refresh_interval: 15
+            time_range_default: last_1h
+            doc:
+              kind: Dashboard
+              metadata:
+                name: model-serving-overview
+              spec:
+                display:
+                  name: Model Serving Overview
+        pagination:
+          total: 1
+          limit: 20
+          offset: 0
+          next_offset: null
+
+    ModelServingDashboard:
+      summary: Complete model serving dashboard
+      value:
+        id: dashboard-abc123
+        name: Model Serving Overview
+        project: openshift-ai
+        doc:
+          kind: Dashboard
+          metadata:
+            name: model-serving-overview
+            project: openshift-ai
+            createdAt: "2025-11-14T22:00:00Z"
+            version: 1
+          spec:
+            display:
+              name: Model Serving Overview
+              description: Real-time metrics for deployed models
+            datasources:
+              prometheus:
+                kind: PrometheusDatasource
+                spec:
+                  directUrl: https://thanos-querier.openshift-monitoring.svc:9091
+            variables: []
+            panels:
+              panel-1:
+                kind: Panel
+                spec:
+                  display:
+                    name: Inference Latency (p95)
+                  plugin:
+                    kind: TimeSeriesChart
+                    spec:
+                      queries:
+                        - kind: PrometheusTimeSeriesQuery
+                          spec:
+                            query: histogram_quantile(0.95, rate(model_inference_duration_seconds_bucket{namespace="openshift-ai"}[5m]))
+              panel-2:
+                kind: Panel
+                spec:
+                  display:
+                    name: Request Rate
+                  plugin:
+                    kind: TimeSeriesChart
+                    spec:
+                      queries:
+                        - kind: PrometheusTimeSeriesQuery
+                          spec:
+                            query: sum(rate(http_requests_total{namespace="openshift-ai"}[5m]))
+            layouts:
+              - kind: Grid
+                spec:
+                  items:
+                    - x: 0
+                      y: 0
+                      width: 12
+                      height: 6
+                      content:
+                        $ref: "#/spec/panels/panel-1"
+                    - x: 0
+                      y: 6
+                      width: 12
+                      height: 6
+                      content:
+                        $ref: "#/spec/panels/panel-2"
+        created_at: "2025-11-14T22:00:00Z"
+        created_by: stella@redhat.com
+        updated_at: "2025-11-14T23:00:00Z"
+        updated_by: stella@redhat.com
+        version: 1
+        state: active
+        template_id: template-model-serving
+        refresh_interval: 15
+        time_range_default: last_1h
+
+    CreateModelServingDashboard:
+      summary: Create model serving dashboard
+      value:
+        name: Model Serving Overview
+        doc:
+          kind: Dashboard
+          spec:
+            display:
+              name: Model Serving Overview
+            datasources:
+              prometheus:
+                kind: PrometheusDatasource
+                spec:
+                  directUrl: https://thanos-querier.openshift-monitoring.svc:9091
+            panels:
+              panel-1:
+                kind: Panel
+                spec:
+                  display:
+                    name: Inference Latency (p95)
+                  plugin:
+                    kind: TimeSeriesChart
+                    spec:
+                      queries:
+                        - kind: PrometheusTimeSeriesQuery
+                          spec:
+                            query: histogram_quantile(0.95, rate(model_inference_duration_seconds_bucket{namespace="openshift-ai"}[5m]))
+            layouts:
+              - kind: Grid
+                spec:
+                  items:
+                    - x: 0
+                      y: 0
+                      width: 12
+                      height: 6
+                      content:
+                        $ref: "#/spec/panels/panel-1"
+        refresh_interval: 15
+        time_range_default: last_1h
+
+    ExportedDashboard:
+      summary: Exported dashboard configuration
+      value:
+        kind: Dashboard
+        metadata:
+          name: model-serving-overview
+          project: openshift-ai
+          createdAt: "2025-11-14T22:00:00Z"
+          version: 1
+        spec:
+          display:
+            name: Model Serving Overview
+          datasources:
+            prometheus:
+              kind: PrometheusDatasource
+          panels:
+            panel-1:
+              kind: Panel
+              spec:
+                display:
+                  name: Inference Latency
+                plugin:
+                  kind: TimeSeriesChart
+          layouts:
+            - kind: Grid
+
+    ShareTokenResponse:
+      summary: Created share token
+      value:
+        token_id: 550e8400-e29b-41d4-a716-446655440000
+        dashboard_id: dashboard-abc123
+        share_url: https://dashboard.openshift-ai.svc/shared/550e8400-e29b-41d4-a716-446655440000
+        created_by: stella@redhat.com
+        created_at: "2025-11-14T23:00:00Z"
+        expires_at: "2025-11-15T23:00:00Z"
+        permissions:
+          - read
+        ip_restrictions:
+          - 10.0.0.0/8
+        revoked: false
+        usage_count: 0
+        last_used_at: null
+
+    TemplateListResponse:
+      summary: List of dashboard templates
+      value:
+        templates:
+          - id: template-model-serving
+            name: Model Serving Dashboard
+            description: Real-time metrics for deployed model serving endpoints
+            category: model_serving
+            version: 1.0.0
+            is_system: true
+            usage_count: 42
+            variables:
+              namespace:
+                type: string
+                required: true
+              model_name:
+                type: string
+                required: true
+          - id: template-training-job
+            name: Training Job Dashboard
+            description: Monitor training job progress
+            category: training_job
+            version: 1.0.0
+            is_system: true
+            usage_count: 28
+
+    InstantiateTemplateRequest:
+      summary: Instantiate template request
+      value:
+        template_id: template-model-serving
+        dashboard_name: My Model Serving Dashboard
+        variables:
+          namespace: openshift-ai
+          model_name: sentiment-analysis-v2
+
+    MetricQueryRequest:
+      summary: Metric query request
+      value:
+        query: histogram_quantile(0.95, rate(model_inference_duration_seconds_bucket{namespace="openshift-ai"}[5m]))
+        start: "2025-11-14T22:00:00Z"
+        end: "2025-11-14T23:00:00Z"
+        step: 15s
+
+    MetricQueryResponse:
+      summary: Metric query response
+      value:
+        status: success
+        data:
+          resultType: matrix
+          result:
+            - metric:
+                __name__: model_inference_duration_seconds
+                namespace: openshift-ai
+                pod: model-serving-abc123
+              values:
+                - [1731628800, "0.125"]
+                - [1731628815, "0.130"]
+                - [1731628830, "0.128"]
+
+    UserPreferences:
+      summary: User preferences
+      value:
+        user_id: stella@redhat.com
+        default_time_range: last_1h
+        default_refresh_interval: 15
+        timezone: America/New_York
+        favorite_dashboards:
+          - dashboard-abc123
+          - dashboard-def456
+        recent_dashboards:
+          - id: dashboard-abc123
+            viewed_at: "2025-11-14T23:00:00Z"
+          - id: dashboard-xyz789
+            viewed_at: "2025-11-14T22:45:00Z"
+        theme: light
+
+    AuditLogResponse:
+      summary: Audit log query response
+      value:
+        logs:
+          - id: 12345
+            timestamp: "2025-11-14T23:00:00.123Z"
+            user_id: stella@redhat.com
+            action: dashboard.share
+            resource_type: Dashboard
+            resource_id: dashboard-abc123
+            project_id: openshift-ai
+            result: success
+            client_ip: 10.0.1.42
+            user_agent: Mozilla/5.0
+            access_method: rbac
+            token_id: null
+            metadata:
+              token_ttl: 24h
+              ip_restrictions:
+                - 10.0.0.0/8
+        pagination:
+          total: 1
+          limit: 100
+          offset: 0
+          next_offset: null
