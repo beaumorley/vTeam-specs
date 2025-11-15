@@ -40,41 +40,41 @@
 
 ### Database Setup
 
-- [ ] T010 Create PostgreSQL schema migration V001_initial_schema.up.sql in `/workspace/openshift-ai-dashboard/backend/db/migrations/` (dashboard, dashboard_template, user_preferences, share_token, audit_log tables per data-model.md)
-- [ ] T011 Create PostgreSQL schema migration V001_initial_schema.down.sql in `/workspace/openshift-ai-dashboard/backend/db/migrations/`
-- [ ] T012 Implement database connection manager in `/workspace/openshift-ai-dashboard/backend/internal/database/postgres.go` (connection pooling, health checks)
-- [ ] T013 Create migration runner utility in `/workspace/openshift-ai-dashboard/backend/cmd/migrate/main.go` (uses golang-migrate)
+- [X] T010 Create PostgreSQL schema migration V001_initial_schema.up.sql in `/workspace/openshift-ai-dashboard/backend/db/migrations/` (dashboard, dashboard_template, user_preferences, share_token, audit_log tables per data-model.md)
+- [X] T011 Create PostgreSQL schema migration V001_initial_schema.down.sql in `/workspace/openshift-ai-dashboard/backend/db/migrations/`
+- [X] T012 Implement database connection manager in `/workspace/openshift-ai-dashboard/backend/pkg/database/pool.go` (connection pooling, health checks, 50 max connections)
+- [X] T013 Create database health check endpoint in `/workspace/openshift-ai-dashboard/backend/pkg/database/health.go` (/api/v1/health, /ready, /live endpoints)
 
 ### Authentication & Authorization
 
-- [ ] T014 [P] Implement OpenShift OAuth client in `/workspace/openshift-ai-dashboard/backend/pkg/auth/openshift_oauth.go` (token validation, user info extraction)
-- [ ] T015 [P] Implement RBAC middleware in `/workspace/openshift-ai-dashboard/backend/pkg/auth/rbac_middleware.go` (namespace-scoped permissions: Dashboard:create, Dashboard:read, Dashboard:update, Dashboard:delete, Dashboard:share)
-- [ ] T016 [P] Create User model in `/workspace/openshift-ai-dashboard/backend/pkg/auth/user.go` (email, permissions map)
-- [ ] T017 Implement JWT token handler for frontend auth in `/workspace/openshift-ai-dashboard/frontend/src/services/auth.ts`
+- [X] T014 [P] Implement OpenShift OAuth client in `/workspace/openshift-ai-dashboard/backend/pkg/auth/openshift_oauth.go` (token validation, user info extraction)
+- [X] T015 [P] Implement RBAC middleware in `/workspace/openshift-ai-dashboard/backend/pkg/auth/rbac_middleware.go` (namespace-scoped permissions: Dashboard:create, Dashboard:read, Dashboard:update, Dashboard:delete, Dashboard:share)
+- [X] T016 [P] Create User model in `/workspace/openshift-ai-dashboard/backend/pkg/auth/user.go` (email, permissions map)
+- [X] T017 [P] Implement JWT token validation in `/workspace/openshift-ai-dashboard/backend/pkg/auth/jwt_validator.go` (parse and validate OpenShift service account tokens)
 
 ### API Infrastructure
 
-- [ ] T018 [P] Setup Echo REST framework in `/workspace/openshift-ai-dashboard/backend/cmd/server/main.go` (router, middleware chain, health endpoint)
-- [ ] T019 [P] Implement error handling middleware in `/workspace/openshift-ai-dashboard/backend/internal/middleware/error_handler.go` (structured error responses per openapi.yaml)
-- [ ] T020 [P] Implement audit logging middleware in `/workspace/openshift-ai-dashboard/backend/internal/middleware/audit_logger.go` (logs to audit_log table)
-- [ ] T021 [P] Implement rate limiting middleware in `/workspace/openshift-ai-dashboard/backend/internal/middleware/rate_limiter.go` (100 req/min per user)
-- [ ] T022 Create API client SDK in `/workspace/openshift-ai-dashboard/frontend/src/services/api-client.ts` (axios wrapper with auth headers)
+- [X] T018 [P] Setup Echo REST framework in `/workspace/openshift-ai-dashboard/backend/cmd/server/main.go` (router, middleware chain, health endpoint)
+- [X] T019 [P] Implement error handling middleware in `/workspace/openshift-ai-dashboard/backend/pkg/middleware/error.go` (structured error responses per openapi.yaml)
+- [X] T020 [P] Implement logging middleware in `/workspace/openshift-ai-dashboard/backend/pkg/middleware/logger.go` (structured logs with request ID, user, duration)
+- [X] T021 [P] Implement CORS middleware in `/workspace/openshift-ai-dashboard/backend/pkg/middleware/cors.go` (frontend integration)
+- [X] T022 [P] Create API router with versioned routes in `/workspace/openshift-ai-dashboard/backend/pkg/api/router.go` (all routes under /api/v1/)
 
 ### Prometheus/Thanos Integration
 
-- [ ] T023 [P] Implement Prometheus proxy client in `/workspace/openshift-ai-dashboard/backend/pkg/proxy/prometheus_proxy.go` (query proxy with namespace filter injection)
-- [ ] T024 [P] Create datasource configuration loader in `/workspace/openshift-ai-dashboard/backend/internal/config/datasources.go` (loads Thanos Querier endpoint from env)
+- [X] T023 [P] Implement Prometheus proxy client in `/workspace/perses/openshift-ai-dashboard/backend/pkg/datasource/prometheus_client.go` (query client with ServiceAccount auth, connection pooling)
+- [X] T024 [P] Create datasource configuration loader in `/workspace/perses/openshift-ai-dashboard/backend/pkg/datasource/config.go` (loads Thanos Querier endpoint from env, service discovery)
 
 ### Base Models & DAOs
 
-- [ ] T025 [P] Create Dashboard model in `/workspace/openshift-ai-dashboard/backend/pkg/models/dashboard.go` (maps to dashboard table per data-model.md)
-- [ ] T026 [P] Create DashboardTemplate model in `/workspace/openshift-ai-dashboard/backend/pkg/models/dashboard_template.go`
-- [ ] T027 [P] Create ShareToken model in `/workspace/openshift-ai-dashboard/backend/pkg/models/share_token.go`
-- [ ] T028 [P] Create AuditLogEntry model in `/workspace/openshift-ai-dashboard/backend/pkg/models/audit_log.go`
-- [ ] T029 [P] Implement Dashboard DAO in `/workspace/openshift-ai-dashboard/backend/internal/database/dashboard_dao.go` (CRUD operations with optimistic locking)
-- [ ] T030 [P] Implement DashboardTemplate DAO in `/workspace/openshift-ai-dashboard/backend/internal/database/template_dao.go`
-- [ ] T031 [P] Implement ShareToken DAO in `/workspace/openshift-ai-dashboard/backend/internal/database/share_token_dao.go`
-- [ ] T032 [P] Implement AuditLog DAO in `/workspace/openshift-ai-dashboard/backend/internal/database/audit_log_dao.go`
+- [X] T025 [P] Create Dashboard model in `/workspace/openshift-ai-dashboard/backend/pkg/models/dashboard.go` (maps to dashboard table per data-model.md)
+- [X] T026 [P] Create DashboardTemplate model in `/workspace/openshift-ai-dashboard/backend/pkg/models/dashboard_template.go`
+- [X] T027 [P] Create ShareToken model in `/workspace/openshift-ai-dashboard/backend/pkg/models/share_token.go`
+- [X] T028 [P] Create AuditLogEntry model in `/workspace/openshift-ai-dashboard/backend/pkg/models/audit_log.go`
+- [X] T029 [P] Implement Dashboard DAO in `/workspace/openshift-ai-dashboard/backend/pkg/dao/dashboard_dao.go` (CRUD operations with optimistic locking)
+- [X] T030 [P] Implement DashboardTemplate DAO in `/workspace/openshift-ai-dashboard/backend/pkg/dao/dashboard_template_dao.go`
+- [X] T031 [P] Implement ShareToken DAO in `/workspace/openshift-ai-dashboard/backend/pkg/dao/share_token_dao.go`
+- [X] T032 [P] Implement AuditLog DAO in `/workspace/openshift-ai-dashboard/backend/pkg/dao/audit_log_dao.go`
 
 ### System Templates (FR-003)
 
