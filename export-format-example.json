@@ -1,0 +1,210 @@
+{
+  "kind": "Dashboard",
+  "apiVersion": "v1",
+  "metadata": {
+    "name": "GPU Utilization Metrics",
+    "project": "ml-training-workspace",
+    "createdAt": "2025-01-10T08:30:00Z",
+    "updatedAt": "2025-01-15T14:45:00Z",
+    "version": 5
+  },
+  "spec": {
+    "display": {
+      "name": "GPU Utilization Metrics"
+    },
+    "duration": "1h",
+    "refreshInterval": "15s",
+    "variables": [
+      {
+        "kind": "TextVariable",
+        "spec": {
+          "name": "namespace",
+          "value": "ml-training-workspace"
+        }
+      },
+      {
+        "kind": "ListVariable",
+        "spec": {
+          "name": "pod",
+          "display": {
+            "name": "Pod"
+          },
+          "plugin": {
+            "kind": "PrometheusLabelValuesVariable",
+            "spec": {
+              "labelName": "pod",
+              "matchers": [
+                "namespace=\"$namespace\""
+              ]
+            }
+          }
+        }
+      }
+    ],
+    "datasources": {
+      "prometheus": {
+        "kind": "PrometheusDatasource",
+        "spec": {
+          "directUrl": "http://prometheus-operated.openshift-monitoring.svc:9090"
+        }
+      }
+    },
+    "panels": {
+      "gpu-utilization": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "GPU Utilization %"
+          },
+          "plugin": {
+            "kind": "TimeSeriesChart",
+            "spec": {
+              "legend": {
+                "position": "bottom"
+              },
+              "yAxis": {
+                "min": 0,
+                "max": 100,
+                "format": {
+                  "unit": "percent"
+                }
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "PrometheusTimeSeriesQuery",
+              "spec": {
+                "datasource": {
+                  "kind": "PrometheusDatasource",
+                  "name": "prometheus"
+                },
+                "query": "avg by (pod) (DCGM_FI_DEV_GPU_UTIL{namespace=\"$namespace\", pod=~\"$pod\"})"
+              }
+            }
+          ]
+        }
+      },
+      "gpu-memory": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "GPU Memory Usage"
+          },
+          "plugin": {
+            "kind": "TimeSeriesChart",
+            "spec": {
+              "legend": {
+                "position": "bottom"
+              },
+              "yAxis": {
+                "format": {
+                  "unit": "bytes"
+                }
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "PrometheusTimeSeriesQuery",
+              "spec": {
+                "datasource": {
+                  "kind": "PrometheusDatasource",
+                  "name": "prometheus"
+                },
+                "query": "avg by (pod) (DCGM_FI_DEV_FB_USED{namespace=\"$namespace\", pod=~\"$pod\"}) * 1024 * 1024"
+              }
+            }
+          ]
+        }
+      },
+      "gpu-temperature": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "GPU Temperature"
+          },
+          "plugin": {
+            "kind": "GaugeChart",
+            "spec": {
+              "thresholds": {
+                "steps": [
+                  {
+                    "value": 0,
+                    "color": "green"
+                  },
+                  {
+                    "value": 70,
+                    "color": "yellow"
+                  },
+                  {
+                    "value": 85,
+                    "color": "red"
+                  }
+                ]
+              },
+              "max": 100
+            }
+          },
+          "queries": [
+            {
+              "kind": "PrometheusTimeSeriesQuery",
+              "spec": {
+                "datasource": {
+                  "kind": "PrometheusDatasource",
+                  "name": "prometheus"
+                },
+                "query": "avg(DCGM_FI_DEV_GPU_TEMP{namespace=\"$namespace\", pod=~\"$pod\"})"
+              }
+            }
+          ]
+        }
+      }
+    },
+    "layouts": [
+      {
+        "kind": "Grid",
+        "spec": {
+          "items": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 12,
+              "height": 6,
+              "content": {
+                "$ref": "#/spec/panels/gpu-utilization"
+              }
+            },
+            {
+              "x": 12,
+              "y": 0,
+              "width": 12,
+              "height": 6,
+              "content": {
+                "$ref": "#/spec/panels/gpu-memory"
+              }
+            },
+            {
+              "x": 0,
+              "y": 6,
+              "width": 6,
+              "height": 6,
+              "content": {
+                "$ref": "#/spec/panels/gpu-temperature"
+              }
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "annotations": {
+    "openshift.io/dashboard-id": "dashboard-3f7a2bc8",
+    "openshift.io/created-by": "ml-engineer@example.com",
+    "openshift.io/updated-by": "data-scientist@example.com",
+    "openshift.io/state": "active",
+    "openshift.io/refresh-interval": 15,
+    "openshift.io/time-range-default": "last_1h",
+    "openshift.io/template-id": "template-gpu-monitoring"
+  }
+}

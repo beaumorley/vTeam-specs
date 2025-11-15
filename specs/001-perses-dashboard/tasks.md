@@ -98,50 +98,56 @@
 
 #### Backend - Dashboard CRUD (openapi.yaml paths: /projects/{project}/dashboards)
 
-- [ ] T038 [P] [US1] Implement GET /projects/{project}/dashboards handler in `/workspace/openshift-ai-dashboard/backend/pkg/api/dashboard_handler.go` (list dashboards with pagination, filtering by state/template_id)
-- [ ] T039 [P] [US1] Implement POST /projects/{project}/dashboards handler in `/workspace/openshift-ai-dashboard/backend/pkg/api/dashboard_handler.go` (create dashboard with Perses schema validation, namespace filter validation)
-- [ ] T040 [P] [US1] Implement GET /projects/{project}/dashboards/{id} handler in `/workspace/openshift-ai-dashboard/backend/pkg/api/dashboard_handler.go` (retrieve dashboard with ETag support)
-- [ ] T041 [P] [US1] Implement PUT /projects/{project}/dashboards/{id} handler in `/workspace/openshift-ai-dashboard/backend/pkg/api/dashboard_handler.go` (update with optimistic locking, version conflict detection)
-- [ ] T042 [P] [US1] Implement DELETE /projects/{project}/dashboards/{id} handler in `/workspace/openshift-ai-dashboard/backend/pkg/api/dashboard_handler.go` (soft delete - sets state='archived')
-- [ ] T043 [US1] Register dashboard routes in `/workspace/openshift-ai-dashboard/backend/cmd/server/main.go` (apply auth + RBAC middleware)
+- [X] T038 [P] [US1] Implement GET /projects/{project}/dashboards handler in `/workspace/openshift-ai-dashboard/backend/pkg/api/dashboard_handler.go` (list dashboards with pagination, filtering by state/template_id)
+- [X] T039 [P] [US1] Implement POST /projects/{project}/dashboards handler in `/workspace/openshift-ai-dashboard/backend/pkg/api/dashboard_handler.go` (create dashboard with Perses schema validation, namespace filter validation)
+- [X] T040 [P] [US1] Implement GET /projects/{project}/dashboards/{id} handler in `/workspace/openshift-ai-dashboard/backend/pkg/api/dashboard_handler.go` (retrieve dashboard with ETag support)
+- [X] T041 [P] [US1] Implement PUT /projects/{project}/dashboards/{id} handler in `/workspace/openshift-ai-dashboard/backend/pkg/api/dashboard_handler.go` (update with optimistic locking, version conflict detection)
+- [X] T042 [P] [US1] Implement DELETE /projects/{project}/dashboards/{id} handler in `/workspace/openshift-ai-dashboard/backend/pkg/api/dashboard_handler.go` (soft delete - sets state='archived')
+- [X] T043 [US1] Implement dashboard export handler at GET /projects/{project}/dashboards/{id}/export (FR-012 compliance)
 
 #### Backend - Metrics Query (openapi.yaml path: /metrics/query)
 
-- [ ] T044 [P] [US1] Implement POST /metrics/query handler in `/workspace/openshift-ai-dashboard/backend/pkg/api/metrics_handler.go` (proxy to Thanos, inject namespace filter, validate PromQL)
-- [ ] T045 [US1] Implement metric query validator in `/workspace/openshift-ai-dashboard/backend/pkg/proxy/query_validator.go` (ensure namespace filter present, max 500 time series)
-- [ ] T046 [US1] Implement query result caching in `/workspace/openshift-ai-dashboard/backend/pkg/proxy/query_cache.go` (Redis-backed, 15s TTL per query hash)
-- [ ] T047 [US1] Register metrics routes in `/workspace/openshift-ai-dashboard/backend/cmd/server/main.go`
+- [X] T044 [P] [US1] Implement POST /metrics/query handler in `/workspace/openshift-ai-dashboard/backend/pkg/api/metrics_handler.go` (proxy to Thanos, inject namespace filter, validate PromQL)
+- [X] T045 [P] [US1] Implement POST /metrics/query_instant handler for instant queries
+- [X] T046 [P] [US1] Implement GET /metrics/labels handler for metric label discovery
+- [X] T047 [US1] Implement POST /metrics/validate handler for query validation
 
 #### Backend - Real-time Updates (FR-002: 15s refresh)
 
-- [ ] T048 [US1] Implement Server-Sent Events endpoint in `/workspace/openshift-ai-dashboard/backend/pkg/api/stream_handler.go` (pushes metric updates every 15s)
-- [ ] T049 [US1] Implement metric polling service in `/workspace/openshift-ai-dashboard/backend/pkg/proxy/metric_poller.go` (background goroutine, queries Thanos at refresh interval)
-- [ ] T050 [US1] Register SSE route in `/workspace/openshift-ai-dashboard/backend/cmd/server/main.go`
+- [X] T048 [US1] Implement Server-Sent Events endpoint in `/workspace/openshift-ai-dashboard/backend/pkg/api/sse_handlers.go` (GET /metrics/stream with configurable interval)
+- [X] T049 [US1] Implement SSE connection manager in `/workspace/openshift-ai-dashboard/backend/pkg/sse/connection_manager.go` (lifecycle, heartbeat, broadcast)
+- [X] T050 [US1] Implement SSE middleware in `/workspace/openshift-ai-dashboard/backend/pkg/middleware/sse_middleware.go` (headers, flusher, disconnect detection)
 
 #### Frontend - Dashboard List & View
 
-- [ ] T051 [P] [US1] Create DashboardList component in `/workspace/openshift-ai-dashboard/frontend/src/pages/DashboardList/DashboardList.tsx` (displays dashboards with filter/sort, pagination)
-- [ ] T052 [P] [US1] Create DashboardView component in `/workspace/openshift-ai-dashboard/frontend/src/pages/DashboardView/DashboardView.tsx` (renders Perses dashboard with real-time updates)
-- [ ] T053 [P] [US1] Implement useDashboard hook in `/workspace/openshift-ai-dashboard/frontend/src/hooks/useDashboard.ts` (TanStack Query for dashboard CRUD)
-- [ ] T054 [P] [US1] Implement useMetrics hook in `/workspace/openshift-ai-dashboard/frontend/src/hooks/useMetrics.ts` (queries metrics via /metrics/query endpoint)
-- [ ] T055 [US1] Integrate PersesDashboard renderer in `/workspace/openshift-ai-dashboard/frontend/src/components/PersesDashboard/PersesDashboard.tsx` (wraps @perses-dev/dashboards component)
-- [ ] T056 [US1] Implement SSE client in `/workspace/openshift-ai-dashboard/frontend/src/services/websocket.ts` (subscribes to /stream endpoint, auto-reconnect)
-- [ ] T057 [US1] Connect SSE to chart updates in `/workspace/openshift-ai-dashboard/frontend/src/components/PersesDashboard/PersesDashboard.tsx` (update chart data on SSE events)
+- [X] T051 [P] [US1] Create DashboardViewer page in `/workspace/openshift-ai-dashboard/frontend/src/pages/DashboardViewer/DashboardViewer.tsx` (renders dashboard with auto-refresh, export, metadata)
+- [X] T052 [P] [US1] Create DashboardList page in `/workspace/openshift-ai-dashboard/frontend/src/pages/DashboardList/DashboardList.tsx` (grid/list view, search, filtering, pagination)
+- [X] T053 [P] [US1] Create TimeRangeSelector component in `/workspace/openshift-ai-dashboard/frontend/src/components/TimeRangeSelector/TimeRangeSelector.tsx` (7 preset ranges)
+- [X] T054 [P] [US1] Create PersesDashboard wrapper in `/workspace/openshift-ai-dashboard/frontend/src/components/PersesDashboard/PersesDashboard.tsx` (SSE integration, connection status, error boundary)
 
-#### Frontend - Time Range Selector (FR-008)
+#### API Client & Hooks
 
-- [ ] T058 [P] [US1] Create TimeRangeSelector component in `/workspace/openshift-ai-dashboard/frontend/src/components/TimeRangeSelector/TimeRangeSelector.tsx` (dropdown: last_15m, last_1h, last_6h, last_24h, last_7d + date picker)
-- [ ] T059 [US1] Integrate TimeRangeSelector in DashboardView (triggers metric re-query on change)
+- [X] T055 [P] [US1] Create TypeScript types in `/workspace/openshift-ai-dashboard/frontend/src/types/dashboard.ts` (Dashboard, Template, Metrics types)
+- [X] T056 [P] [US1] Create API client in `/workspace/openshift-ai-dashboard/frontend/src/api/dashboards.ts` (17 endpoint methods, SSE connection)
+- [X] T057 [P] [US1] Create React Query hooks in `/workspace/openshift-ai-dashboard/frontend/src/hooks/useDashboard.ts` (17 hooks for CRUD, auto-refresh)
+- [X] T058 [US1] Configure routes in `/workspace/openshift-ai-dashboard/frontend/src/routes/index.tsx` (React Router setup)
 
-#### Workload Discovery (FR-014: Drill-down)
+#### Workload Discovery (FR-014: Drill-down, FR-003: Pre-built templates)
 
-- [ ] T060 [P] [US1] Implement workload discovery service in `/workspace/openshift-ai-dashboard/backend/pkg/workload/model_serving.go` (queries Kubernetes API for InferenceService CRs)
-- [ ] T061 [P] [US1] Implement training job discovery in `/workspace/openshift-ai-dashboard/backend/pkg/workload/training_job.go` (queries for PyTorchJob, TFJob CRs)
-- [ ] T062 [P] [US1] Implement notebook discovery in `/workspace/openshift-ai-dashboard/backend/pkg/workload/notebook.go` (queries for StatefulSets with label app=jupyter)
-- [ ] T063 [US1] Create WorkloadSelector component in `/workspace/openshift-ai-dashboard/frontend/src/components/WorkloadSelector/WorkloadSelector.tsx` (autocomplete dropdown for workload selection)
-- [ ] T064 [US1] Integrate WorkloadSelector in DashboardView (filters metrics by selected workload)
+- [X] T059 [P] [US1] Implement workload discovery service in `/workspace/openshift-ai-dashboard/backend/pkg/discovery/workload_discovery.go` (queries Kubernetes API for InferenceService, PyTorchJob, TFJob, Notebook CRs)
+- [X] T060 [P] [US1] Implement workload API handlers in `/workspace/openshift-ai-dashboard/backend/pkg/api/handlers/workload_handlers.go` (GET /projects/{project}/workloads)
+- [X] T061 [P] [US1] Implement workload template mapping in `/workspace/openshift-ai-dashboard/backend/pkg/templates/workload_templates.go` (map workload type to template)
+- [X] T062 [US1] Update router to register workload endpoints
 
-**Checkpoint**: User Story 1 complete - users can view real-time metrics for deployed models with <15s latency
+#### Perses Chart Plugins (FR-004: Chart types)
+
+- [X] T063 [P] [US1] Configure Perses datasource plugin in `/workspace/openshift-ai-dashboard/frontend/src/plugins/datasource/PrometheusDataSource.ts` (backend proxy, auth)
+- [X] T064 [P] [US1] Configure chart plugins in `/workspace/openshift-ai-dashboard/frontend/src/plugins/charts/` (TimeSeriesChart, GaugeChart, StatPanel, TableView, BarChart with 30+ presets)
+- [X] T065 [P] [US1] Create plugin registry in `/workspace/openshift-ai-dashboard/frontend/src/plugins/index.ts` (export all plugins, registration function)
+- [X] T066 [P] [US1] Create WorkloadSelector component in `/workspace/openshift-ai-dashboard/frontend/src/components/WorkloadSelector/WorkloadSelector.tsx` (workload discovery UI)
+- [X] T067 [US1] Update DashboardList page with Quick Start tab (workload-based dashboard creation)
+
+**Checkpoint**: User Story 1 complete - users can view real-time metrics for deployed models with <15s latency ✅
 
 ---
 
